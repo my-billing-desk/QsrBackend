@@ -35,6 +35,18 @@ const Variant = sequelize.define('Variant', {
     sortOrder: {
         type: DataTypes.INTEGER,
         defaultValue: 0
+    },
+    isDelivery: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
+    },
+    isTakeaway: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
+    },
+    isDineIn: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
     }
 });
 

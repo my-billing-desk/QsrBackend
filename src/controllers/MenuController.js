@@ -1,4 +1,4 @@
-const { Category, Item, Variant, Addon, AddonGroup, sequelize } = require('../models');
+const { Category, Item, Variant, Addon, AddonGroup, VariationGroup, sequelize } = require('../models');
 
 // Categories
 // Categories
@@ -68,7 +68,15 @@ exports.getItems = async (req, res) => {
         const items = await Item.findAll({
             include: [
                 Category,
-                Variant,
+                {
+                    model: VariationGroup,
+                    as: 'variationGroups',
+                    include: [Variant]
+                },
+                {
+                    model: Variant,
+                    include: [VariationGroup]
+                },
                 {
                     model: AddonGroup,
                     as: 'addonGroups',
@@ -81,6 +89,8 @@ exports.getItems = async (req, res) => {
                 ['id', 'ASC'],
                 [Variant, 'sortOrder', 'ASC'],
                 [Variant, 'id', 'ASC'],
+                [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'sortOrder', 'ASC'],
+                [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'id', 'ASC'],
                 [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'sortOrder', 'ASC'],
                 [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'id', 'ASC']
             ]
@@ -94,7 +104,7 @@ exports.getItems = async (req, res) => {
 exports.createItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
-        const { variants, addonGroupIds, ...itemData } = req.body;
+        const { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
 
         // Create Item
         const item = await Item.create(itemData, { transaction: t });
@@ -109,20 +119,28 @@ exports.createItem = async (req, res) => {
         }
 
         // Assign Addon Groups if provided
-        if (addonGroupIds && Array.isArray(addonGroupIds) && addonGroupIds.length > 0) {
+        if (addonGroupIds && Array.isArray(addonGroupIds)) {
             await item.setAddonGroups(addonGroupIds, { transaction: t });
+        }
+
+        // Handle Variation Groups
+        if (variationGroupIds && Array.isArray(variationGroupIds)) {
+            await item.setVariationGroups(variationGroupIds, { transaction: t });
         }
 
         await t.commit();
 
         // Fetch complete item
         const completeItem = await Item.findByPk(item.id, {
-            include: [Variant, { model: AddonGroup, as: 'addonGroups' }]
+            include: [
+                Variant,
+                { model: AddonGroup, as: 'addonGroups' },
+                { model: VariationGroup, as: 'variationGroups' }
+            ]
         });
-
         res.status(201).json(completeItem);
     } catch (error) {
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         res.status(400).json({ error: error.message });
     }
 };
@@ -131,7 +149,7 @@ exports.updateItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { variants, addonGroupIds, ...itemData } = req.body;
+        const { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
 
         const item = await Item.findByPk(id);
         if (!item) {
@@ -159,14 +177,23 @@ exports.updateItem = async (req, res) => {
             await item.setAddonGroups(addonGroupIds, { transaction: t });
         }
 
+        // Handle VariationGroups
+        if (variationGroupIds) {
+            await item.setVariationGroups(variationGroupIds, { transaction: t });
+        }
+
         await t.commit();
 
         const updatedItem = await Item.findByPk(id, {
-            include: [Variant, { model: AddonGroup, as: 'addonGroups' }]
+            include: [
+                Variant,
+                { model: AddonGroup, as: 'addonGroups' },
+                { model: VariationGroup, as: 'variationGroups' }
+            ]
         });
         res.json(updatedItem);
     } catch (error) {
-        await t.rollback();
+        if (!t.finished) await t.rollback();
         res.status(500).json({ error: error.message });
     }
 };
@@ -323,15 +350,15 @@ exports.importFullMenu = async (req, res) => {
                     attributes: mainRow['Attributes'],
                     goodsServices: mainRow['Goods_Services'],
                     unit: mainRow['Unit'],
-                    isSelfItemRecipe: mainRow['is_Self_Item_Recipe'] === 'TRUE' || mainRow['is_Self_Item_Recipe'] === '1' || mainRow['is_Self_Item_Recipe'] === true,
+                    isSelfItemRecipe: mainRow['is_Self_Item_Recipe'] == 'TRUE',
                     minimumStockLevel: parseFloat(mainRow['minimum_stock_level']) || 0,
                     atParStockLevel: parseFloat(mainRow['at_par_stock_level']) || 0,
                     rank: parseInt(mainRow['Rank']) || 0,
                     packingCharges: parseFloat(mainRow['Packing_Charges']) || 0,
-                    allowDecimalQty: mainRow['Allow_Decimal_Qty'] === 'TRUE' || mainRow['Allow_Decimal_Qty'] === '1',
-                    availableOffline: mainRow['Available_Offline'] === 'TRUE' || mainRow['Available_Offline'] === '1',
-                    availableSwiggy: mainRow['Available_Swiggy'] === 'TRUE' || mainRow['Available_Swiggy'] === '1',
-                    availableZomato: mainRow['Available_Zomato'] === 'TRUE' || mainRow['Available_Zomato'] === '1',
+                    allowDecimalQty: mainRow['Allow_Decimal_Qty'] == 'TRUE',
+                    availableOffline: mainRow['Available_Offline'] == 'TRUE',
+                    availableSwiggy: mainRow['Available_Swiggy'] == 'TRUE',
+                    availableZomato: mainRow['Available_Zomato'] == 'TRUE',
                     isAvailable: true // Default to true on import
                 },
                 transaction: t
@@ -357,9 +384,9 @@ exports.importFullMenu = async (req, res) => {
                     rank: parseInt(mainRow['Rank']) || 0,
                     packingCharges: parseFloat(mainRow['Packing_Charges']) || 0,
                     allowDecimalQty: mainRow['Allow_Decimal_Qty'] == 'TRUE',
-                    availableOffline: mainRow['Available_Offline'] === 'TRUE' || mainRow['Available_Offline'] === '1',
-                    availableSwiggy: mainRow['Available_Swiggy'] === 'TRUE' || mainRow['Available_Swiggy'] === '1',
-                    availableZomato: mainRow['Available_Zomato'] === 'TRUE' || mainRow['Available_Zomato'] === '1'
+                    availableOffline: mainRow['Available_Offline'] == 'TRUE',
+                    availableSwiggy: mainRow['Available_Swiggy'] == 'TRUE',
+                    availableZomato: mainRow['Available_Zomato'] == 'TRUE'
                 }, { transaction: t });
                 results.updated++;
             } else {
@@ -367,9 +394,52 @@ exports.importFullMenu = async (req, res) => {
             }
 
             // 3. Handle Variations (Iterate all rows in group)
+            // 3. Handle Variations (Iterate all rows in group)
+            const seenVariants = new Set();
+            const itemVariationGroups = new Set(); // Track unique variation groups for this item
+
             for (const row of groupRows) {
                 const varName = row['Variation'];
-                if (varName) {
+                if (varName && !seenVariants.has(varName)) {
+                    seenVariants.add(varName);
+
+                    // Handle VariationGroup
+                    let vgId = null;
+                    if (row['Variation_group_name']) {
+                        // Find or Create VG
+                        const [vg, vgCreated] = await VariationGroup.findOrCreate({
+                            where: { name: row['Variation_group_name'] },
+                            defaults: {
+                                departmentName: row['Variation_Group_Department'] || null
+                            },
+                            transaction: t
+                        });
+
+                        // If it existed but department is new/updated in CSV, update it? 
+                        // Let's assume CSV dictates truth if provided
+                        if (!vgCreated && row['Variation_Group_Department']) {
+                            await vg.update({ departmentName: row['Variation_Group_Department'] }, { transaction: t });
+                        }
+
+                        vgId = vg.id;
+                        itemVariationGroups.add(vg.id);
+
+                        // Master Variant (Template) - ensure it exists in the Group globally
+                        await Variant.findOrCreate({
+                            where: {
+                                name: varName,
+                                variationGroupId: vgId,
+                                itemId: null
+                            },
+                            defaults: {
+                                price: parseFloat(row['Variation_Price']) || 0,
+                                sapCode: row['Variation_Sap_Code'],
+                                packingCharges: parseFloat(row['Variation_Packing_Charges']) || 0
+                            },
+                            transaction: t
+                        });
+                    }
+
                     await Variant.findOrCreate({
                         where: {
                             name: varName,
@@ -377,13 +447,66 @@ exports.importFullMenu = async (req, res) => {
                         },
                         defaults: {
                             price: parseFloat(row['Variation_Price']) || 0,
-                            groupName: row['Variation_group_name'],
+                            variationGroupId: vgId,
                             sapCode: row['Variation_Sap_Code'],
                             packingCharges: parseFloat(row['Variation_Packing_Charges']) || 0
                         },
                         transaction: t
                     });
                 }
+            }
+
+            // Link Item to Variation Groups
+            if (itemVariationGroups.size > 0) {
+                await item.setVariationGroups(Array.from(itemVariationGroups), { transaction: t });
+            }
+
+            // 4. Handle Addon Groups
+            const seenAddons = new Set();
+            const itemAddonGroups = new Set();
+
+            for (const row of groupRows) {
+                const agName = row['Addon_Group_Name'];
+                // If Addon Group Name exists
+                if (agName) {
+                    // Find or Create Addon Group
+                    // Note: AddonGroups are global entities usually, so finding by Name is key.
+                    const [ag] = await AddonGroup.findOrCreate({
+                        where: { name: agName },
+                        defaults: {
+                            minSelection: parseInt(row['Addon_Group_Min']) || 0,
+                            maxSelection: parseInt(row['Addon_Group_Max']) || 1
+                        },
+                        transaction: t
+                    });
+
+                    itemAddonGroups.add(ag.id);
+
+                    // Find or Create Addon
+                    const addonName = row['Addon_Name'];
+                    if (addonName) {
+                        const addonKey = `${ag.id}-${addonName}`;
+                        if (!seenAddons.has(addonKey)) {
+                            seenAddons.add(addonKey);
+                            await Addon.findOrCreate({
+                                where: {
+                                    name: addonName,
+                                    addonGroupId: ag.id
+                                },
+                                defaults: {
+                                    price: parseFloat(row['Addon_Price']) || 0,
+                                    packingCharges: parseFloat(row['Addon_Packing_Charges']) || 0,
+                                    sortOrder: parseInt(row['Addon_Item_Rank']) || 0
+                                },
+                                transaction: t
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (itemAddonGroups.size > 0) {
+                await item.setAddonGroups(Array.from(itemAddonGroups), { transaction: t });
             }
         }
 
@@ -400,8 +523,13 @@ exports.exportFullMenu = async (req, res) => {
     try {
         const items = await Item.findAll({
             include: [
-                { model: Category, include: [{ model: Category, as: 'parentCategory' }] }, // Self-referencing if defined, or assume structure
-                { model: Variant }
+                { model: Category, include: [{ model: Category, as: 'parentCategory' }] },
+                { model: Variant, include: [VariationGroup] },
+                {
+                    model: AddonGroup,
+                    as: 'addonGroups',
+                    include: [Addon]
+                }
             ]
         });
 
@@ -415,10 +543,10 @@ exports.exportFullMenu = async (req, res) => {
             if (item.Category) {
                 categoryName = item.Category.name;
                 categoryOnlineDisplay = item.Category.onlineDisplay || '';
-                // Since there is no actual recursive include in model definition usually, lets query parent if needed or rely on provided structure if user defined it
-                // For now, if we don't have deeply nested Category model setup, we might miss Parent Name if not eagerly loaded.
-                // But generally users set this up. Let's assume Category has parentId
-                if (item.Category.parentId) {
+                if (item.Category.parentCategory) {
+                    parentCategoryName = item.Category.parentCategory.name;
+                } else if (item.Category.parentId) {
+                    // Fallback check if parentCategory wasn't loaded but ID exists (though include should catch it)
                     const parent = await Category.findByPk(item.Category.parentId);
                     if (parent) parentCategoryName = parent.name;
                 }
@@ -448,35 +576,84 @@ exports.exportFullMenu = async (req, res) => {
                 "Allow_Decimal_Qty": item.allowDecimalQty ? 'TRUE' : 'FALSE',
                 "Available_Offline": item.availableOffline ? 'TRUE' : 'FALSE',
                 "Available_Swiggy": item.availableSwiggy ? 'TRUE' : 'FALSE',
-                "Available_Zomato": item.availableZomato ? 'TRUE' : 'FALSE',
-                "Addon_Group_Name": "",
-                "Addon_Group_Selection": "",
-                "Addon_Group_Min": "",
-                "Addon_Group_Max": ""
+                "Available_Zomato": item.availableZomato ? 'TRUE' : 'FALSE'
             };
 
-            // If variants exist, create a row for each variant
-            if (item.Variants && item.Variants.length > 0) {
-                item.Variants.forEach(variant => {
-                    rows.push({
-                        ...baseData,
-                        "Variation_group_name": variant.groupName || '',
-                        "Variation": variant.name,
-                        "Variation_Price": variant.price,
-                        "Variation_Sap_Code": variant.sapCode || '',
-                        "Variation_Packing_Charges": variant.packingCharges || 0
-                    });
+            const variants = (item.Variants && item.Variants.length > 0) ? item.Variants : [null];
+
+            // Collect all (AddonGroup, AddonOption) pairs
+            let addonOptions = [];
+            if (item.addonGroups && item.addonGroups.length > 0) {
+                item.addonGroups.forEach(ag => {
+                    // If group has no addons, still list the group?
+                    if (ag.Addons && ag.Addons.length > 0) {
+                        ag.Addons.forEach(addon => {
+                            addonOptions.push({ group: ag, addon: addon });
+                        });
+                    } else {
+                        addonOptions.push({ group: ag, addon: null });
+                    }
                 });
             } else {
-                // Single item row (no variants)
-                rows.push({
-                    ...baseData,
-                    "Variation_group_name": "",
-                    "Variation": "",
-                    "Variation_Price": "",
-                    "Variation_Sap_Code": "",
-                    "Variation_Packing_Charges": ""
-                });
+                addonOptions = [null];
+            }
+
+            // Cartesian Product of Variants x AddonOptions
+            for (const variant of variants) {
+                for (const addonOpt of addonOptions) {
+                    const row = { ...baseData };
+
+                    // Variant Data
+                    if (variant) {
+                        row["Variation_group_name"] = variant.VariationGroup ? variant.VariationGroup.name : '';
+                        row["Variation_Group_Department"] = variant.VariationGroup ? (variant.VariationGroup.departmentName || '') : '';
+                        row["Variation"] = variant.name;
+                        row["Variation_Price"] = variant.price;
+                        row["Variation_Sap_Code"] = variant.sapCode || '';
+                        row["Variation_Packing_Charges"] = variant.packingCharges || 0;
+                    } else {
+                        row["Variation_group_name"] = "";
+                        row["Variation_Group_Department"] = "";
+                        row["Variation"] = "";
+                        row["Variation_Price"] = "";
+                        row["Variation_Sap_Code"] = "";
+                        row["Variation_Packing_Charges"] = "";
+                    }
+
+                    // Addon Data
+                    if (addonOpt && addonOpt.group) {
+                        row["Addon_Group_Name"] = addonOpt.group.name;
+                        row["Addon_Group_Selection"] = addonOpt.group.maxSelection > 1 ? 'Multiple' : 'Single';
+                        row["Addon_Group_Min"] = addonOpt.group.minSelection;
+                        row["Addon_Group_Max"] = addonOpt.group.maxSelection;
+
+                        if (addonOpt.addon) {
+                            row["Addon_Name"] = addonOpt.addon.name;
+                            row["Addon_Price"] = addonOpt.addon.price;
+                            row["Addon_Sap_Code"] = addonOpt.addon.sapCode || '';
+                            row["Addon_Packing_Charges"] = addonOpt.addon.packingCharges || 0;
+                            row["Addon_Item_Rank"] = addonOpt.addon.sortOrder || 0;
+                        } else {
+                            row["Addon_Name"] = "";
+                            row["Addon_Price"] = "";
+                            row["Addon_Sap_Code"] = "";
+                            row["Addon_Packing_Charges"] = "";
+                            row["Addon_Item_Rank"] = "";
+                        }
+                    } else {
+                        row["Addon_Group_Name"] = "";
+                        row["Addon_Group_Selection"] = "";
+                        row["Addon_Group_Min"] = "";
+                        row["Addon_Group_Max"] = "";
+                        row["Addon_Name"] = "";
+                        row["Addon_Price"] = "";
+                        row["Addon_Sap_Code"] = "";
+                        row["Addon_Packing_Charges"] = "";
+                        row["Addon_Item_Rank"] = "";
+                    }
+
+                    rows.push(row);
+                }
             }
         }
 

@@ -57,8 +57,12 @@ exports.deleteAddonGroup = async (req, res) => {
 exports.getVariationGroups = async (req, res) => {
     try {
         const groups = await VariationGroup.findAll({
-            include: [Variant],
-            order: [[Variant, 'sortOrder', 'ASC'], [Variant, 'id', 'ASC']]
+            include: [{
+                model: Variant,
+                where: { itemId: null },
+                required: false
+            }],
+            order: [['createdAt', 'DESC'], [{ model: Variant }, 'sortOrder', 'ASC']]
         });
         res.json(groups);
     } catch (error) {
@@ -91,6 +95,47 @@ exports.createVariationGroup = async (req, res) => {
         res.status(201).json(completeGroup);
     } catch (error) {
         res.status(400).json({ error: error.message });
+    }
+};
+
+exports.updateVariationGroup = async (req, res) => {
+    const t = await require('../config/database').transaction();
+    try {
+        const { id } = req.params;
+        const { name, departmentName, onlineDisplayName, isActive, variants } = req.body;
+
+        const group = await VariationGroup.findByPk(id);
+        if (!group) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Group not found' });
+        }
+
+        await group.update({ name, departmentName, onlineDisplayName, isActive }, { transaction: t });
+
+        if (variants) {
+            // Remove existing master variants (itemId: null) for this group
+            await Variant.destroy({
+                where: { variationGroupId: id, itemId: null },
+                transaction: t
+            });
+
+            if (variants.length > 0) {
+                const variantPromises = variants.map((variant, index) => Variant.create({
+                    ...variant,
+                    price: variant.price || 0, // Default to 0 as price is removed from UI
+                    itemId: null, // Ensure these are master variants
+                    sortOrder: variant.sortOrder !== undefined ? variant.sortOrder : index,
+                    variationGroupId: id
+                }, { transaction: t }));
+                await Promise.all(variantPromises);
+            }
+        }
+
+        await t.commit();
+        res.json({ message: 'Variation Group updated' });
+    } catch (error) {
+        await t.rollback();
+        res.status(500).json({ error: error.message });
     }
 };
 

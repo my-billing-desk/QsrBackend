@@ -1,4 +1,8 @@
-const { RawMaterial, Recipe, RecipeIngredient, Item, Variant } = require('../models');
+const {
+    RawMaterial, Recipe, RecipeIngredient, Item, Variant,
+    Supplier, Purchase, PurchaseItem, PurchaseOrder, PurchaseOrderItem,
+    PurchaseReturn, PurchaseReturnItem, Wastage, WastageItem, sequelize
+} = require('../models');
 
 // --- Raw Materials ---
 
@@ -218,6 +222,72 @@ exports.getPurchaseOrders = async (req, res) => {
         });
         res.json(orders);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.receivePurchaseOrder = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const { items, invoiceNumber, invoiceDate } = req.body; // Items with receivedQty and price
+
+        const po = await PurchaseOrder.findByPk(id);
+        if (!po) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Purchase Order not found' });
+        }
+
+        if (po.status === 'Received') {
+            await t.rollback();
+            return res.status(400).json({ error: 'PO already received' });
+        }
+
+        // Update PO Status
+        await po.update({ status: 'Received', deliveryDate: new Date() }, { transaction: t });
+
+        // Create a definitive Purchase Record (GRN)
+        const purchase = await Purchase.create({
+            supplierId: po.supplierId,
+            invoiceNumber: invoiceNumber || `PO-${po.poNumber}`,
+            invoiceDate: invoiceDate || new Date(),
+            totalAmount: items.reduce((sum, item) => sum + (item.quantity * item.price), 0), // Calc total
+            status: 'Completed'
+        }, { transaction: t });
+
+        // Process Items
+        if (items && items.length > 0) {
+            for (const item of items) {
+                // Update PO Item (Received Qty)
+                await PurchaseOrderItem.update(
+                    { quantityReceived: item.quantity, price: item.price, amount: item.quantity * item.price },
+                    { where: { purchaseOrderId: id, rawMaterialId: item.rawMaterialId }, transaction: t }
+                );
+
+                // Add to Purchase Record
+                await PurchaseItem.create({
+                    purchaseId: purchase.id,
+                    rawMaterialId: item.rawMaterialId,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    price: item.price,
+                    amount: item.quantity * item.price
+                }, { transaction: t });
+
+                // Update Stock
+                const material = await RawMaterial.findByPk(item.rawMaterialId);
+                if (material) {
+                    await material.increment('currentStock', { by: parseFloat(item.quantity), transaction: t });
+                    // Update latest purchase price
+                    await material.update({ purchasePrice: item.price }, { transaction: t });
+                }
+            }
+        }
+
+        await t.commit();
+        res.json({ message: 'PO Received and Stock Updated', purchase });
+    } catch (error) {
+        if (!t.finished) await t.rollback();
         res.status(500).json({ error: error.message });
     }
 };

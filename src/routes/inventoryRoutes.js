@@ -22,6 +22,7 @@ router.post('/purchases', InventoryController.createPurchase);
 
 router.get('/orders', InventoryController.getPurchaseOrders);
 router.post('/orders', InventoryController.createPurchaseOrder);
+router.post('/orders/:id/receive', InventoryController.receivePurchaseOrder);
 
 router.get('/returns', InventoryController.getPurchaseReturns);
 router.post('/returns', InventoryController.createPurchaseReturn);
@@ -30,7 +31,7 @@ router.post('/returns', InventoryController.createPurchaseReturn);
 router.get('/stats', InventoryController.getInventoryStats);
 
 // Wastage
-router.get('/wastage', inventoryController.getWastages);
-router.post('/wastage', inventoryController.createWastage);
+router.get('/wastage', InventoryController.getWastages);
+router.post('/wastage', InventoryController.createWastage);
 
 module.exports = router;
