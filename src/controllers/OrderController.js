@@ -41,6 +41,7 @@ exports.createOrder = async (req, res) => {
 
         // Calculate totals if not provided (basic validation)
         let calculatedTotal = 0;
+        const activeTotal = orderData.totalAmount;
 
         // Create Order
         const order = await Order.create(orderData);
@@ -55,9 +56,11 @@ exports.createOrder = async (req, res) => {
 
             await OrderItem.bulkCreate(orderItems);
 
-            // Update total amount
-            calculatedTotal = orderItems.reduce((sum, item) => sum + item.total, 0);
-            await order.update({ totalAmount: calculatedTotal });
+            // Update total amount only if not provided by client (to preserve tax/packing logic from POS)
+            if (activeTotal === undefined || activeTotal === null) {
+                calculatedTotal = orderItems.reduce((sum, item) => sum + item.total, 0);
+                await order.update({ totalAmount: calculatedTotal });
+            }
         }
 
         // Fetch complete order to return
@@ -122,9 +125,11 @@ exports.updateOrder = async (req, res) => {
             }
 
             // 3. Recalculate total if needed
-            // Fetch items again to be sure or calc from input
-            const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            await order.update({ totalAmount: total });
+            // Only if totalAmount wasn't in the update payload
+            if (updateData.totalAmount === undefined || updateData.totalAmount === null) {
+                const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                await order.update({ totalAmount: total });
+            }
         }
 
         // Return updated order with items
