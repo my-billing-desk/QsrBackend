@@ -92,3 +92,48 @@ exports.updateSync = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+exports.updateOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { items, ...updateData } = req.body;
+
+        const order = await Order.findByPk(id);
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        // Update Order fields
+        await order.update(updateData);
+
+        // Update Items if provided
+        if (items) {
+            // 1. Remove existing items
+            await OrderItem.destroy({ where: { orderId: id } });
+
+            // 2. Add new items
+            if (items.length > 0) {
+                const orderItems = items.map(item => ({
+                    ...item,
+                    orderId: id,
+                    total: item.price * item.quantity
+                }));
+                await OrderItem.bulkCreate(orderItems);
+            }
+
+            // 3. Recalculate total if needed
+            // Fetch items again to be sure or calc from input
+            const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            await order.update({ totalAmount: total });
+        }
+
+        // Return updated order with items
+        const updatedOrder = await Order.findByPk(id, {
+            include: [{ model: OrderItem, as: 'items' }]
+        });
+
+        res.json(updatedOrder);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};

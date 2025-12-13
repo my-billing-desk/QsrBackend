@@ -17,6 +17,19 @@ exports.getRawMaterials = async (req, res) => {
     }
 };
 
+exports.getRawMaterialById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const material = await RawMaterial.findByPk(id);
+        if (!material) {
+            return res.status(404).json({ error: 'Raw Material not found' });
+        }
+        res.json(material);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 exports.createRawMaterial = async (req, res) => {
     try {
         const material = await RawMaterial.create(req.body);
@@ -136,6 +149,21 @@ exports.saveRecipe = async (req, res) => {
         res.json(completeRecipe);
     } catch (error) {
         res.status(400).json({ error: error.message });
+    }
+};
+
+exports.deleteRecipe = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const recipe = await Recipe.findByPk(id);
+        if (!recipe) {
+            return res.status(404).json({ error: 'Recipe not found' });
+        }
+        await RecipeIngredient.destroy({ where: { recipeId: id } });
+        await recipe.destroy();
+        res.json({ message: 'Recipe deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 };
 // --- Suppliers ---
@@ -370,6 +398,28 @@ exports.getInventoryStats = async (req, res) => {
             totalStockValue: totalValue,
             totalWastage: 450 // Mock for now
         });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getClosingStockReport = async (req, res) => {
+    try {
+        const materials = await RawMaterial.findAll({
+            order: [['name', 'ASC']]
+        });
+
+        // Return current closing stock
+        const report = materials.map(m => ({
+            id: m.id,
+            name: m.name,
+            unit: m.unit,
+            closingStock: m.currentStock,
+            price: m.purchasePrice,
+            value: (m.currentStock * m.purchasePrice).toFixed(2)
+        }));
+
+        res.json(report);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

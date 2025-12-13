@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/DashboardController');
+const dashboardController = require('../controllers/dashboardController');
 
-router.get('/stats', controller.getStats);
-router.post('/clear-data', controller.clearDatabase);
+router.get('/stats', dashboardController.getStats);
+router.get('/charts', dashboardController.getCharts);
+router.get('/recent-orders', dashboardController.getRecentOrders);
+router.get('/top-items', dashboardController.getTopItems);
 
 module.exports = router;

@@ -4,6 +4,7 @@ const InventoryController = require('../controllers/InventoryController');
 
 // Raw Materials
 router.get('/materials', InventoryController.getRawMaterials);
+router.get('/materials/:id', InventoryController.getRawMaterialById);
 router.post('/materials', InventoryController.createRawMaterial);
 router.put('/materials/:id', InventoryController.updateRawMaterial);
 router.delete('/materials/:id', InventoryController.deleteRawMaterial);
@@ -12,6 +13,7 @@ router.delete('/materials/:id', InventoryController.deleteRawMaterial);
 router.get('/recipes', InventoryController.getRecipes);
 router.get('/recipe', InventoryController.getRecipeByItem); // ?itemId=1
 router.post('/recipes', InventoryController.saveRecipe);
+router.delete('/recipes/:id', InventoryController.deleteRecipe);
 
 // Procurement
 router.get('/suppliers', InventoryController.getSuppliers);
@@ -29,6 +31,7 @@ router.post('/returns', InventoryController.createPurchaseReturn);
 
 // Stats
 router.get('/stats', InventoryController.getInventoryStats);
+router.get('/reports/closing-stock', InventoryController.getClosingStockReport);
 
 // Wastage
 router.get('/wastage', InventoryController.getWastages);

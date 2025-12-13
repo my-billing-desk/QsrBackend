@@ -17,19 +17,12 @@ const groupRoutes = require('./src/routes/groupRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
 
 // Middleware
-// Manual CORS to ensure it works
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform');
-    res.header('Access-Control-Allow-Credentials', 'true');
-
-    // Intercept OPTIONS method
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
+app.use(cors({
+    origin: true, // Reflects the request origin, functioning acts as a wildcard
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform']
+}));
 
 // Request Logger
 app.use((req, res, next) => {
@@ -59,7 +52,7 @@ app.get('/', (req, res) => {
 // Sync Database and Start Server
 // force: false ensures we don't drop tables on restart
 // Using sync() instead of sync({ alter: true }) to allow manual migration and avoid sqlite lock issues
-sequelize.sync().then(() => {
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced successfully');
     app.listen(PORT, () => {
         console.log(`Server running on http://localhost:${PORT}`);

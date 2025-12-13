@@ -12,6 +12,10 @@ const Order = sequelize.define('Order', {
         allowNull: false,
         unique: true
     },
+    source: {
+        type: DataTypes.STRING, // e.g. 'POS', 'Zomato', 'Swiggy'
+        defaultValue: 'POS'
+    },
     type: {
         type: DataTypes.ENUM('dine-in', 'takeaway', 'delivery'),
         defaultValue: 'dine-in'

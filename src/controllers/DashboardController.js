@@ -1,90 +1,152 @@
-const { Order, OrderItem } = require('../models');
+const { Order, OrderItem, Item, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getStats = async (req, res) => {
     try {
-        // Mocking real-time stats aggregation for now, or using real DB queries if data exists
-        // In a real scenario, we would aggregate Order table data
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-        // Count orders for today
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
 
-        const totalOrders = await Order.count({
+        // Fetch orders for today
+        const orders = await Order.findAll({
             where: {
-                createdAt: { [Op.gte]: startOfDay },
+                createdAt: {
+                    [Op.between]: [todayStart, todayEnd]
+                },
                 status: { [Op.ne]: 'cancelled' }
             }
         });
 
-        const totalSales = await Order.sum('totalAmount', {
-            where: {
-                createdAt: { [Op.gte]: startOfDay },
-                status: { [Op.ne]: 'cancelled' }
-            }
-        }) || 0;
+        // Total Income for today
+        const totalIncome = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
 
-        const dineInOrders = await Order.count({
-            where: {
-                type: 'dine-in',
-                createdAt: { [Op.gte]: startOfDay },
-                status: { [Op.ne]: 'cancelled' }
-            }
-        });
-        const takeawayOrders = await Order.count({
-            where: {
-                type: 'takeaway',
-                createdAt: { [Op.gte]: startOfDay },
-                status: { [Op.ne]: 'cancelled' }
-            }
-        });
-        const deliveryOrders = await Order.count({
-            where: {
-                type: 'delivery',
-                createdAt: { [Op.gte]: startOfDay },
-                status: { [Op.ne]: 'cancelled' }
-            }
-        });
+        // Total Orders for today
+        const totalOrders = orders.length;
+
+        // Total Customers (Approx based on unique phone or name, here simplified to count of orders with customer info)
+        // Or unique phone numbers
+        const uniqueConnects = new Set(orders.map(o => o.customerPhone).filter(Boolean)).size;
+
+        // Avg per customer (Income / unique customers or total orders)
+        // Usually avg order value
+        const avgPerCustomer = totalOrders > 0 ? (totalIncome / totalOrders).toFixed(0) : 0;
+
+        // Online vs DineIn/Takeaway counts if needed for charts
+        // ...
 
         res.json({
-            totalSales: totalSales,
-            totalOrders: totalOrders,
-            dineIn: dineInOrders,
-            takeaway: takeawayOrders,
-            delivery: deliveryOrders,
-            avgOrderValue: totalOrders > 0 ? (totalSales / totalOrders).toFixed(2) : 0
+            totalIncome,
+            totalOrders,
+            totalCustomers: uniqueConnects,
+            avgPerCustomer
+        });
+    } catch (error) {
+        console.error("Dashboard Stats Error:", error);
+        res.status(500).json({ message: "Error fetching dashboard stats" });
+    }
+};
+
+exports.getCharts = async (req, res) => {
+    try {
+        // Revenue Trend (Last 7 days or similar)
+        // For now, let's just do hourly breakdown for today as requested in some contexts, or last 12 months.
+        // Let's implement a simple "Last 7 Days" revenue.
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const revenueData = await Order.findAll({
+            attributes: [
+                [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
+                [sequelize.fn('SUM', sequelize.col('totalAmount')), 'total']
+            ],
+            where: {
+                createdAt: { [Op.gte]: sevenDaysAgo },
+                status: { [Op.ne]: 'cancelled' }
+            },
+            group: [sequelize.fn('DATE', sequelize.col('createdAt'))],
+            order: [[sequelize.fn('DATE', sequelize.col('createdAt')), 'ASC']]
+        });
+
+        const revenueLabels = [];
+        const revenueValues = [];
+
+        // Fill gaps if needed, but for MVP just sending what we have
+        revenueData.forEach(d => {
+            revenueLabels.push(d.get('date'));
+            revenueValues.push(d.get('total'));
+        });
+
+
+        // Category/Item popularity (Top 5 items)
+        const topItemsData = await OrderItem.findAll({
+            attributes: [
+                'itemName',
+                [sequelize.fn('SUM', sequelize.col('quantity')), 'count']
+            ],
+            include: [{
+                model: Order,
+                attributes: [],
+                where: { status: { [Op.ne]: 'cancelled' } }
+            }],
+            group: ['itemName'],
+            order: [[sequelize.fn('SUM', sequelize.col('quantity')), 'DESC']],
+            limit: 5
+        });
+
+        const topItems = topItemsData.map(i => ({
+            name: i.itemName,
+            count: i.get('count')
+        }));
+
+        res.json({
+            revenue: {
+                labels: revenueLabels,
+                data: revenueValues
+            },
+            topItems: topItems
         });
 
     } catch (error) {
-        console.error("Dashboard stats error", error);
-        res.status(500).json({ error: error.message });
+        console.error("Dashboard Chart Error:", error);
+        res.status(500).json({ message: "Error fetching dashboard charts" });
     }
 };
 
-exports.clearDatabase = async (req, res) => {
+exports.getRecentOrders = async (req, res) => {
     try {
-        const { Category, Item, Variant, Addon, Tax, Discount, Order, OrderItem } = require('../models');
-        const { type } = req.body;
-
-        if (type === 'orders') {
-            // Clear only orders
-            await OrderItem.destroy({ where: {}, truncate: false });
-            await Order.destroy({ where: {}, truncate: false });
-            res.json({ message: 'Sales data (Orders) cleared successfully' });
-        } else {
-            // Clear everything except Users (Full Reset)
-            await OrderItem.destroy({ where: {}, truncate: false });
-            await Order.destroy({ where: {}, truncate: false });
-            await Variant.destroy({ where: {}, truncate: false });
-            await Item.destroy({ where: {}, truncate: false });
-            await Category.destroy({ where: {}, truncate: false });
-            await Addon.destroy({ where: {}, truncate: false });
-            await Tax.destroy({ where: {}, truncate: false });
-            await Discount.destroy({ where: {}, truncate: false });
-            res.json({ message: 'All database records (except Users) cleared successfully' });
-        }
+        const recentOrders = await Order.findAll({
+            limit: 5,
+            order: [['createdAt', 'DESC']],
+            attributes: ['id', 'orderNumber', 'customerName', 'totalAmount', 'status', 'createdAt', 'type']
+        });
+        res.json(recentOrders);
     } catch (error) {
-        console.error("Clear DB error", error);
-        res.status(500).json({ error: error.message });
+        console.error("Dashboard Recent Orders Error:", error);
+        res.status(500).json({ message: "Error fetching recent orders" });
     }
 };
+
+exports.getTopItems = async (req, res) => {
+    // Reusing logic from charts or separate if detailed
+    try {
+        const topItemsData = await OrderItem.findAll({
+            attributes: [
+                'itemName',
+                [sequelize.fn('SUM', sequelize.col('OrderItem.price')), 'totalValue'], // revenue from this item
+                [sequelize.fn('SUM', sequelize.col('quantity')), 'count']
+            ],
+            group: ['itemName'],
+            order: [[sequelize.fn('SUM', sequelize.col('quantity')), 'DESC']],
+            limit: 5
+        });
+
+        res.json(topItemsData);
+    } catch (error) {
+        console.error("Dashboard Top Items Error:", error);
+        res.status(500).json({ message: "Error fetching top items" });
+    }
+}
