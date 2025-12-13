@@ -51,11 +51,11 @@ app.get('/', (req, res) => {
 
 // Sync Database and Start Server
 // force: false ensures we don't drop tables on restart
-// Using sync() instead of sync({ alter: true }) to allow manual migration and avoid sqlite lock issues
-sequelize.sync({ alter: true }).then(() => {
-    console.log('Database synced successfully');
+// Sync Database
+sequelize.sync().then(() => {
+    console.log('Database synced');
     app.listen(PORT, () => {
-        console.log(`Server running on http://localhost:${PORT}`);
+        console.log(`Server is running on port ${PORT}`);
     });
 }).catch(err => {
     console.error('Failed to sync database:', err);

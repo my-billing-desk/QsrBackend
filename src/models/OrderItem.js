@@ -30,6 +30,14 @@ const OrderItem = sequelize.define('OrderItem', {
     total: {
         type: DataTypes.FLOAT,
         allowNull: false
+    },
+    variantName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    addons: {
+        type: DataTypes.JSON, // Stores array of addon objects
+        allowNull: true
     }
 });
 
