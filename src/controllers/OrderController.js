@@ -1,6 +1,49 @@
-const { Order, OrderItem } = require('../models');
+const { Order, OrderItem, Recipe, RecipeIngredient, RawMaterial } = require('../models');
 
 const { Op } = require('sequelize');
+
+// Helper to consume stock
+const consumeStock = async (items) => {
+    for (const item of items) {
+        try {
+            // 1. Find Recipe
+            let recipe = null;
+
+            // Priority: Variant-specific recipe -> Item-specific recipe
+            if (item.variantId) {
+                recipe = await Recipe.findOne({
+                    where: { variantId: item.variantId },
+                    include: [{ model: RecipeIngredient }]
+                });
+            }
+
+            if (!recipe) {
+                recipe = await Recipe.findOne({
+                    where: { itemId: item.itemId, variantId: null },
+                    include: [{ model: RecipeIngredient }]
+                });
+            }
+
+            // 2. Consume Ingredients
+            if (recipe && recipe.RecipeIngredients) {
+                for (const ingredient of recipe.RecipeIngredients) {
+                    const yieldQty = recipe.yieldQty || 1;
+                    const consumption = (ingredient.quantity / yieldQty) * item.quantity;
+                    const material = await RawMaterial.findByPk(ingredient.rawMaterialId);
+
+                    if (material) {
+                        // We use simple update instead of decrement to avoid potential concurrency confusion if not in transaction, 
+                        // though decrement is generally safe.
+                        await material.decrement('currentStock', { by: consumption });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`Failed to consume stock for item ${item.itemName}:`, err);
+            // We don't block order creation for stock errors, but log it
+        }
+    }
+};
 
 exports.getOrders = async (req, res) => {
     try {
@@ -55,6 +98,11 @@ exports.createOrder = async (req, res) => {
             }));
 
             await OrderItem.bulkCreate(orderItems);
+
+            // Trigger Stock Consumption
+            // We pass the original 'items' from request as they contain itemId/variantId
+            // The orderItems constructed above might lose some props if not careful, but 'items' has everything needed.
+            await consumeStock(items);
 
             // Update total amount only if not provided by client (to preserve tax/packing logic from POS)
             if (activeTotal === undefined || activeTotal === null) {
