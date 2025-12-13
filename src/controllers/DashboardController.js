@@ -25,22 +25,46 @@ exports.getStats = async (req, res) => {
         // Total Orders for today
         const totalOrders = orders.length;
 
-        // Total Customers (Approx based on unique phone or name, here simplified to count of orders with customer info)
-        // Or unique phone numbers
+        // Total Customers (Approx based on unique phone or name)
         const uniqueConnects = new Set(orders.map(o => o.customerPhone).filter(Boolean)).size;
 
         // Avg per customer (Income / unique customers or total orders)
-        // Usually avg order value
         const avgPerCustomer = totalOrders > 0 ? (totalIncome / totalOrders).toFixed(0) : 0;
 
-        // Online vs DineIn/Takeaway counts if needed for charts
-        // ...
+        // Calculate Breakdown
+        let dineInTotal = 0;
+        let takeAwayTotal = 0;
+        let deliveryTotal = 0;
+
+        orders.forEach(order => {
+            const amount = order.totalAmount || 0;
+            // Normalize type check (case-insensitive just in case)
+            const type = (order.type || '').toLowerCase().replace('-', '').replace(' ', '');
+
+            if (type.includes('dine') || type === 'dinein') {
+                dineInTotal += amount;
+            } else if (type.includes('take') || type === 'takeaway') {
+                takeAwayTotal += amount;
+            } else if (type.includes('delivery')) {
+                deliveryTotal += amount;
+            } else {
+                // Fallback for unknown types or 'POS' standard
+                // If you have specific other types, handle them. 
+                // For now assuming these 3 main types.
+                // Could default to DineIn if needed, but safer to leave separate if mismatched.
+                // Or maybe 'pos' defaults to DineIn?
+                // dineInTotal += amount;
+            }
+        });
 
         res.json({
             totalIncome,
             totalOrders,
             totalCustomers: uniqueConnects,
-            avgPerCustomer
+            avgPerCustomer,
+            dineInTotal,
+            takeAwayTotal,
+            deliveryTotal
         });
     } catch (error) {
         console.error("Dashboard Stats Error:", error);
