@@ -4,7 +4,7 @@ const cors = require('cors');
 const { sequelize } = require('./src/models'); // Using the models index for relationships
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Routes Import
 const menuRoutes = require('./src/routes/menuRoutes');
