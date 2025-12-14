@@ -15,6 +15,7 @@ const configRoutes = require('./src/routes/configRoutes');
 const settingRoutes = require('./src/routes/settingRoutes');
 const groupRoutes = require('./src/routes/groupRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
+const aggregatorRoutes = require('./src/routes/aggregatorRoutes');
 
 // Middleware
 app.use(cors({
@@ -44,6 +45,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/inventory', inventoryRoutes); // Added groupRoutes registration
+app.use('/api/aggregators', aggregatorRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running' });

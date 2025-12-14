@@ -6,6 +6,7 @@ const OrderItem = require('./OrderItem');
 const User = require('./User');
 const Variant = require('./Variant');
 const Addon = require('./Addon');
+const Aggregator = require('./Aggregator');
 const Tax = require('./Tax');
 
 const Discount = require('./Discount');
@@ -24,6 +25,7 @@ const PurchaseOrder = require('./PurchaseOrder');
 const PurchaseOrderItem = require('./PurchaseOrderItem');
 const PurchaseReturn = require('./PurchaseReturn');
 const PurchaseReturnItem = require('./PurchaseReturnItem');
+const Outlet = require('./Outlet');
 
 // Relationships
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -121,5 +123,8 @@ module.exports = {
     PurchaseOrder,
     PurchaseOrderItem,
     PurchaseReturn,
-    PurchaseReturnItem
+    PurchaseReturn,
+    PurchaseReturnItem,
+    Outlet,
+    Aggregator
 };
