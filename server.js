@@ -27,11 +27,16 @@ app.use(cors({
 
 // Request Logger
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        console.log(`${new Date().toISOString()} - ${req.method} ${req.url} ${res.statusCode} ${duration}ms`);
+    });
     next();
 });
 
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 const passport = require('./src/config/passport');
 app.use(passport.initialize());
@@ -54,7 +59,9 @@ app.get('/', (req, res) => {
 // Sync Database and Start Server
 // force: false ensures we don't drop tables on restart
 // Sync Database
-sequelize.sync().then(() => {
+// Sync Database
+// Sync Database
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced');
     app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);

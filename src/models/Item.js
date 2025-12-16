@@ -116,6 +116,14 @@ const Item = sequelize.define('Item', {
     orderDineIn: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    image: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    showImage: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
     }
 });
 

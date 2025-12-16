@@ -104,7 +104,20 @@ exports.getItems = async (req, res) => {
 exports.createItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
-        const { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
+        // When using FormData, complex fields like variants need parsing if sent as JSON strings
+        let { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
+
+        if (typeof variants === 'string') variants = JSON.parse(variants);
+        if (typeof addonGroupIds === 'string') addonGroupIds = JSON.parse(addonGroupIds);
+        if (typeof variationGroupIds === 'string') variationGroupIds = JSON.parse(variationGroupIds);
+
+        if (req.file) {
+            itemData.image = `/uploads/${req.file.filename}`;
+        }
+
+        // Clean up boolean fields coming as strings in FormData
+        if (itemData.showImage === 'true') itemData.showImage = true;
+        if (itemData.showImage === 'false') itemData.showImage = false;
 
         // Create Item
         const item = await Item.create(itemData, { transaction: t });
@@ -149,7 +162,19 @@ exports.updateItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
+        let { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
+
+        if (typeof variants === 'string') variants = JSON.parse(variants);
+        if (typeof addonGroupIds === 'string') addonGroupIds = JSON.parse(addonGroupIds);
+        if (typeof variationGroupIds === 'string') variationGroupIds = JSON.parse(variationGroupIds);
+
+        if (req.file) {
+            itemData.image = `/uploads/${req.file.filename}`;
+        }
+
+        // Clean up boolean fields coming as strings in FormData
+        if (itemData.showImage === 'true') itemData.showImage = true;
+        if (itemData.showImage === 'false') itemData.showImage = false;
 
         const item = await Item.findByPk(id);
         if (!item) {

@@ -63,6 +63,14 @@ const Order = sequelize.define('Order', {
     gstIn: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    isKotPrinted: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    printBillRequested: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     }
 });
 

@@ -66,6 +66,15 @@ exports.getOrders = async (req, res) => {
         if (paymentMode && paymentMode !== 'All') whereClause.paymentMode = paymentMode; // Assuming paymentMode added to Order model
         if (customerName) whereClause.customerName = { [Op.like]: `%${customerName}%` };
         if (req.query.customerPhone) whereClause.customerPhone = { [Op.like]: `%${req.query.customerPhone}%` };
+        if (req.query.source) whereClause.source = req.query.source;
+
+        // Polling filters
+        if (req.query.isKotPrinted !== undefined) {
+            whereClause.isKotPrinted = req.query.isKotPrinted === 'true';
+        }
+        if (req.query.printBillRequested !== undefined) {
+            whereClause.printBillRequested = req.query.printBillRequested === 'true';
+        }
 
         const orders = await Order.findAll({
             where: whereClause,
@@ -74,6 +83,7 @@ exports.getOrders = async (req, res) => {
         });
         res.json(orders);
     } catch (error) {
+        console.error('getOrders Error:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -81,6 +91,13 @@ exports.getOrders = async (req, res) => {
 exports.createOrder = async (req, res) => {
     try {
         const { items, ...orderData } = req.body;
+
+        // Auto-generate order number if missing (e.g. from Scan & Order)
+        if (!orderData.orderNumber) {
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 1000);
+            orderData.orderNumber = `SO-${timestamp}-${random}`;
+        }
 
         // Calculate totals if not provided (basic validation)
         let calculatedTotal = 0;

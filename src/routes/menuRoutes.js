@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/MenuController');
+const upload = require('../middleware/upload');
 
 router.get('/categories', controller.getCategories);
 router.post('/categories', controller.createCategory);
 router.delete('/categories/:id', controller.deleteCategory);
 
 router.get('/items', controller.getItems);
-router.post('/items', controller.createItem);
-router.put('/items/:id', controller.updateItem);
+router.post('/items', upload.single('image'), controller.createItem);
+router.put('/items/:id', upload.single('image'), controller.updateItem);
 router.delete('/items/:id', controller.deleteItem);
 router.patch('/items/:id/status', controller.updateItemStatus);
 router.post('/items/bulk-status', controller.updateBulkStatus);
