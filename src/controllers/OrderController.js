@@ -67,6 +67,7 @@ exports.getOrders = async (req, res) => {
         if (customerName) whereClause.customerName = { [Op.like]: `%${customerName}%` };
         if (req.query.customerPhone) whereClause.customerPhone = { [Op.like]: `%${req.query.customerPhone}%` };
         if (req.query.source) whereClause.source = req.query.source;
+        if (req.query.tableNumber) whereClause.tableNumber = req.query.tableNumber;
 
         // Polling filters
         if (req.query.isKotPrinted !== undefined) {

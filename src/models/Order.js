@@ -12,6 +12,10 @@ const Order = sequelize.define('Order', {
         allowNull: false,
         unique: true
     },
+    tableNumber: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     source: {
         type: DataTypes.STRING, // e.g. 'POS', 'Zomato', 'Swiggy'
         defaultValue: 'POS'
@@ -57,6 +61,10 @@ const Order = sequelize.define('Order', {
         defaultValue: 0.0
     },
     roundOff: {
+        type: DataTypes.FLOAT,
+        defaultValue: 0.0
+    },
+    containerCharge: {
         type: DataTypes.FLOAT,
         defaultValue: 0.0
     },
