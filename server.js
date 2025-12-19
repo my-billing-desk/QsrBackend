@@ -26,6 +26,7 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform']
 }));
+app.options('*', cors()); // Enable OPTIONS for all routes
 
 // Debug Logger
 app.use((req, res, next) => {
@@ -50,19 +51,20 @@ const passport = require('./src/config/passport');
 app.use(passport.initialize());
 
 // Routes
-// In Cloud Functions, req.url might be stripped of '/api' or not. 
-// We mount on /api/menu to match specific subpaths.
-app.use('/api/menu', menuRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/settings', settingRoutes);
-app.use('/api/groups', groupRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/aggregators', aggregatorRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/special-notes', specialNoteRoutes);
+// In Cloud Functions, the function name (e.g., 'api') is part of the base URL.
+// The req.path seen by Express is relative to that. 
+// So /api/menu/categories -> req.path = /menu/categories
+app.use('/menu', menuRoutes);
+app.use('/orders', orderRoutes);
+app.use('/auth', authRoutes);
+app.use('/dashboard', dashboardRoutes);
+app.use('/config', configRoutes);
+app.use('/settings', settingRoutes);
+app.use('/groups', groupRoutes);
+app.use('/inventory', inventoryRoutes);
+app.use('/aggregators', aggregatorRoutes);
+app.use('/reports', reportRoutes);
+app.use('/special-notes', specialNoteRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running (Root)' });
