@@ -104,11 +104,15 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Sync Database and Start Server
-// force: false ensures we don't drop tables on restart
+// Ping route for health check (DB independent)
+app.get('/ping', (req, res) => res.status(200).send('pong'));
+app.get('/api/ping', (req, res) => res.status(200).send('pong'));
+
 // Sync Database
+let dbReady = false;
 sequelize.sync().then(() => {
     console.log('Database synced');
+    dbReady = true;
     if (require.main === module) {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
@@ -116,6 +120,18 @@ sequelize.sync().then(() => {
     }
 }).catch(err => {
     console.error('Failed to sync database:', err);
+});
+
+// DB Readiness Middleware (optional, or just let it fail)
+app.use((req, res, next) => {
+    if (!dbReady && req.path !== '/ping' && req.path !== '/api/ping') {
+        // We still allow it to proceed, hoping DB works or to fail naturally.
+        // Adding a header to indicate status
+        res.set('X-DB-Status', 'NotReady');
+    } else {
+        res.set('X-DB-Status', 'Ready');
+    }
+    next();
 });
 
 module.exports = app;
