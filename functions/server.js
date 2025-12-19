@@ -20,17 +20,18 @@ const reportRoutes = require('./src/routes/reportRoutes');
 const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
 
 // Middleware
+// Explicit manual CORS
 app.use(cors({
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform']
 }));
-app.options('*', cors()); // Enable OPTIONS for all routes
+app.options('*', cors());
 
 // Debug Logger
 app.use((req, res, next) => {
-    console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, OriginalUrl: ${req.originalUrl}`);
+    console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, Path: ${req.path}`);
     next();
 });
 
@@ -50,21 +51,24 @@ app.use('/uploads', express.static('uploads'));
 const passport = require('./src/config/passport');
 app.use(passport.initialize());
 
+// Router Helper to mount on both / and /api
+const mount = (path, router) => {
+    app.use(path, router);
+    app.use(`/api${path}`, router);
+};
+
 // Routes
-// In Cloud Functions, the function name (e.g., 'api') is part of the base URL.
-// The req.path seen by Express is relative to that. 
-// So /api/menu/categories -> req.path = /menu/categories
-app.use('/menu', menuRoutes);
-app.use('/orders', orderRoutes);
-app.use('/auth', authRoutes);
-app.use('/dashboard', dashboardRoutes);
-app.use('/config', configRoutes);
-app.use('/settings', settingRoutes);
-app.use('/groups', groupRoutes);
-app.use('/inventory', inventoryRoutes);
-app.use('/aggregators', aggregatorRoutes);
-app.use('/reports', reportRoutes);
-app.use('/special-notes', specialNoteRoutes);
+mount('/menu', menuRoutes);
+mount('/orders', orderRoutes);
+mount('/auth', authRoutes);
+mount('/dashboard', dashboardRoutes);
+mount('/config', configRoutes);
+mount('/settings', settingRoutes);
+mount('/groups', groupRoutes);
+mount('/inventory', inventoryRoutes);
+mount('/aggregators', aggregatorRoutes);
+mount('/reports', reportRoutes);
+mount('/special-notes', specialNoteRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running (Root)' });
@@ -76,6 +80,18 @@ app.get('/api', (req, res) => {
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// Catch-all for debugging
+app.all('*', (req, res) => {
+    console.log(`[404] Route not found: ${req.url}`);
+    res.status(404).json({
+        error: 'Route not found',
+        url: req.url,
+        path: req.path,
+        method: req.method,
+        note: 'This is a custom 404 from Express'
+    });
 });
 
 // Sync Database and Start Server
