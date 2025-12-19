@@ -38,6 +38,10 @@ const OrderItem = sequelize.define('OrderItem', {
     addons: {
         type: DataTypes.JSON, // Stores array of addon objects
         allowNull: true
+    },
+    specialNote: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 });
 

@@ -17,6 +17,7 @@ const groupRoutes = require('./src/routes/groupRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const aggregatorRoutes = require('./src/routes/aggregatorRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
+const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
 
 // Middleware
 app.use(cors({
@@ -53,6 +54,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/inventory', inventoryRoutes); // Added groupRoutes registration
 app.use('/api/aggregators', aggregatorRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/special-notes', specialNoteRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running' });
@@ -63,7 +65,7 @@ app.get('/', (req, res) => {
 // Sync Database
 // Sync Database
 // Sync Database
-sequelize.sync({ alter: true }).then(() => {
+sequelize.sync().then(() => {
     console.log('Database synced');
     app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);

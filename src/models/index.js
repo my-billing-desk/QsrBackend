@@ -8,6 +8,7 @@ const Variant = require('./Variant');
 const Addon = require('./Addon');
 const Aggregator = require('./Aggregator');
 const Tax = require('./Tax');
+const SpecialNote = require('./SpecialNote');
 
 const Discount = require('./Discount');
 const Setting = require('./Setting');
@@ -126,5 +127,6 @@ module.exports = {
     PurchaseReturn,
     PurchaseReturnItem,
     Outlet,
-    Aggregator
+    Aggregator,
+    SpecialNote
 };
