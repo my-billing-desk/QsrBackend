@@ -51,10 +51,11 @@ app.use('/uploads', express.static('uploads'));
 const passport = require('./src/config/passport');
 app.use(passport.initialize());
 
-// Router Helper to mount on both / and /api
+// Router Helper to mount on /, /api, and /server
 const mount = (path, router) => {
     app.use(path, router);
     app.use(`/api${path}`, router);
+    app.use(`/server${path}`, router);
 };
 
 // Routes
@@ -105,8 +106,7 @@ app.use((err, req, res, next) => {
 });
 
 // Ping route for health check (DB independent)
-app.get('/ping', (req, res) => res.status(200).send('pong'));
-app.get('/api/ping', (req, res) => res.status(200).send('pong'));
+app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.status(200).send('pong'));
 
 // Sync Database
 let dbReady = false;
