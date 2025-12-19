@@ -21,11 +21,17 @@ const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
 
 // Middleware
 app.use(cors({
-    origin: true, // Reflects the request origin, functioning acts as a wildcard
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform']
 }));
+
+// Debug Logger
+app.use((req, res, next) => {
+    console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, OriginalUrl: ${req.originalUrl}`);
+    next();
+});
 
 // Request Logger
 app.use((req, res, next) => {
@@ -44,6 +50,8 @@ const passport = require('./src/config/passport');
 app.use(passport.initialize());
 
 // Routes
+// In Cloud Functions, req.url might be stripped of '/api' or not. 
+// We mount on /api/menu to match specific subpaths.
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
@@ -51,25 +59,35 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/groups', groupRoutes);
-app.use('/api/inventory', inventoryRoutes); // Added groupRoutes registration
+app.use('/api/inventory', inventoryRoutes);
 app.use('/api/aggregators', aggregatorRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/special-notes', specialNoteRoutes);
 
 app.get('/', (req, res) => {
-    res.json({ message: 'QSR Backend API is running' });
+    res.json({ message: 'QSR Backend API is running (Root)' });
+});
+
+app.get('/api', (req, res) => {
+    res.json({ message: 'QSR Backend API is running (API Root)' });
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
 });
 
 // Sync Database and Start Server
 // force: false ensures we don't drop tables on restart
 // Sync Database
-// Sync Database
-// Sync Database
 sequelize.sync().then(() => {
     console.log('Database synced');
-    app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-    });
+    if (require.main === module) {
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+    }
 }).catch(err => {
     console.error('Failed to sync database:', err);
 });
+
+module.exports = app;
