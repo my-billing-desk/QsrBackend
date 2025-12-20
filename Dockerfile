@@ -1,0 +1,12 @@
+FROM node:20-slim
+WORKDIR /app
+
+# Install dependencies including PostgreSQL client
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY . .
+
+ENV PORT=5001
+EXPOSE 5001
+CMD ["node", "server.js"]

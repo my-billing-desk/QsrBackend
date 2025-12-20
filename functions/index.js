@@ -1,22 +1,14 @@
 const { onRequest } = require("firebase-functions/v2/https");
-const express = require('express');
-const cors = require('cors');
+const app = require('./server');
 
-const app = express();
-app.use(cors({ origin: true }));
-
-app.all('*', (req, res) => {
-    res.json({
-        status: 'online',
-        mode: 'safe_mode',
-        message: 'Backend is responding. Database is temporarily disabled to prevent crashes.',
-        path: req.path,
-        url: req.url,
-        method: req.method
-    });
-});
-
-exports.server = onRequest({
+// Export the Express app as a Firebase Cloud Function
+exports.api = onRequest({
     maxInstances: 10,
-    invoker: 'public'
+    invoker: 'public',
+    // Increase memory if needed, though default 256MB might be tight for sqlite+express
+    memory: "512MiB"
 }, app);
+
+// Forced update to ensure deployment picks up the switch from safe_mode to real server
+
+
