@@ -173,6 +173,8 @@ exports.updateItem = async (req, res) => {
 
         if (req.file) {
             itemData.image = `/uploads/${req.file.filename}`;
+        } else if (itemData.image && typeof itemData.image !== 'string') {
+            delete itemData.image;
         }
 
         // Clean up boolean fields coming as strings in FormData
