@@ -11,6 +11,11 @@ const Category = sequelize.define('Category', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    station: {
+        type: DataTypes.STRING,
+        defaultValue: 'Kitchen',
+        allowNull: false
+    },
     icon: {
         type: DataTypes.STRING,
         allowNull: true

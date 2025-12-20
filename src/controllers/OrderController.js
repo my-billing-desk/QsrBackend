@@ -208,3 +208,16 @@ exports.updateOrder = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+exports.markKotPrinted = async (req, res) => {
+    try {
+        const { id } = req.body;
+        const order = await Order.findByPk(id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+
+        await order.update({ isKotPrinted: true });
+        res.json({ message: 'Marked as printed', id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};

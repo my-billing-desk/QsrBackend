@@ -28,12 +28,18 @@ async function seed() {
 
         // 2. Categories
         console.log('Seeding Categories...');
-        const [catBurgers] = await Category.findOrCreate({ where: { name: 'Burgers' }, defaults: { onlineDisplay: 'Burgers', icon: 'burger' } });
-        const [catWraps] = await Category.findOrCreate({ where: { name: 'Wraps' }, defaults: { onlineDisplay: 'Wraps', icon: 'wrap' } });
-        const [catBeverages] = await Category.findOrCreate({ where: { name: 'Beverages' }, defaults: { onlineDisplay: 'Beverages', icon: 'drink' } });
-        const [catShakes] = await Category.findOrCreate({ where: { name: 'Shakes' }, defaults: { onlineDisplay: 'Shakes', icon: 'icecream' } });
+        const catBeverages = await Category.create({ name: 'Beverages', icon: '🥤', sortOrder: 1, station: 'Bar' });
+        const catStarters = await Category.create({ name: 'Starters', icon: '🍟', sortOrder: 2, station: 'Kitchen' }); // Default
+        const catMainCourse = await Category.create({ name: 'Main Course', icon: '🍛', sortOrder: 3, station: 'Kitchen' });
+        const catBreads = await Category.create({ name: 'Breads', icon: '🍞', sortOrder: 4, station: 'Tandoor' });
+        const catDesserts = await Category.create({ name: 'Desserts', icon: '🍰', sortOrder: 5, station: 'Kitchen' });
+        const catPizzas = await Category.create({ name: 'Pizzas', icon: '🍕', sortOrder: 6, station: 'Kitchen' });
+        const catChinese = await Category.create({ name: 'Chinese', icon: '🥢', sortOrder: 7, station: 'Chinese' });
+        const catSouthIndian = await Category.create({ name: 'South Indian', icon: '🥘', sortOrder: 8, station: 'Kitchen' });
+        const catShakes = await Category.create({ name: 'Shakes', icon: '🥤', sortOrder: 9, station: 'Bar' });
+        const catBurgers = await Category.create({ name: 'Burgers', icon: '🍔', sortOrder: 10, station: 'Kitchen' });
+        const catTandoorStarters = await Category.create({ name: 'Tandoor Starters', icon: '🍗', sortOrder: 11, station: 'Tandoor' });
 
-        // 3. Raw Materials
         console.log('Seeding Raw Materials...');
         // Inferring ingredients for the items
         const materialsData = [
@@ -70,12 +76,31 @@ async function seed() {
         // Spicy Paneer Wrap (141.90)
         const [paneerWrap] = await Item.findOrCreate({
             where: { name: 'Spicy Paneer Wrap' },
-            defaults: { categoryId: catWraps.id, price: 141.90, shortCode: 'SPW', isVeg: true, description: 'Spicy delight' }
+            defaults: { categoryId: catStarters.id, price: 141.90, shortCode: 'SPW', isVeg: true, description: 'Spicy delight' }
+        });
+
+        // Aloo Tikki Burger (37.14)
+        const [alooTikki] = await Item.findOrCreate({
+            where: { name: 'Aloo Tikki Burger' },
+            defaults: { categoryId: catBurgers.id, price: 37.14, shortCode: 'ATB', isVeg: true }
+        });
+
+        // Veg Wrap (120.00) - Mapped to Burgers for now or create Wraps if needed. Let's map to 'Starters' as per new list or Burgers.
+        // Actually, user had Wraps before. Let's map to 'Starters' to be safe and simple.
+        const [vegWrap] = await Item.findOrCreate({
+            where: { name: 'Veg Wrap' },
+            defaults: { categoryId: catStarters.id, price: 120.00, shortCode: 'VWRAP', isVeg: true }
+        });
+
+        // Coke 250ml (19.05)
+        const [coke] = await Item.findOrCreate({
+            where: { name: 'Coke 250ml' },
+            defaults: { categoryId: catBeverages.id, price: 19.05, shortCode: 'COKE', isVeg: true }
         });
 
         // Blue Curacao Mojito (46.67)
         const [blueMojito] = await Item.findOrCreate({
-            where: { name: 'Blue Curco Mojito' }, // Typo in screenshot "Curco"
+            where: { name: 'Blue Curacao Mojito' },
             defaults: { categoryId: catBeverages.id, price: 46.67, shortCode: 'BCM', isVeg: true }
         });
 
