@@ -26,15 +26,18 @@ const consumeStock = async (items) => {
 
             // 2. Consume Ingredients
             if (recipe && recipe.RecipeIngredients) {
-                for (const ingredient of recipe.RecipeIngredients) {
-                    const yieldQty = recipe.yieldQty || 1;
-                    const consumption = (ingredient.quantity / yieldQty) * item.quantity;
-                    const material = await RawMaterial.findByPk(ingredient.rawMaterialId);
+                // Check if Auto Consumption is enabled
+                if (recipe.autoConsumption) {
+                    for (const ingredient of recipe.RecipeIngredients) {
+                        const yieldQty = recipe.yieldQty || 1;
+                        const consumption = (ingredient.quantity / yieldQty) * item.quantity;
+                        const material = await RawMaterial.findByPk(ingredient.rawMaterialId);
 
-                    if (material) {
-                        // We use simple update instead of decrement to avoid potential concurrency confusion if not in transaction, 
-                        // though decrement is generally safe.
-                        await material.decrement('currentStock', { by: consumption });
+                        if (material) {
+                            // We use simple update instead of decrement to avoid potential concurrency confusion if not in transaction, 
+                            // though decrement is generally safe.
+                            await material.decrement('currentStock', { by: consumption });
+                        }
                     }
                 }
             }

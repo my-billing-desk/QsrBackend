@@ -112,7 +112,7 @@ exports.getRecipeByItem = async (req, res) => {
 
 exports.saveRecipe = async (req, res) => {
     try {
-        const { itemId, variantId, yieldQty, instructions, ingredients } = req.body;
+        const { itemId, variantId, yieldQty, instructions, ingredients, autoConsumption } = req.body;
         // ingredients: [{ rawMaterialId, quantity, unit, ... }]
 
         // Check for existing recipe
@@ -124,12 +124,12 @@ exports.saveRecipe = async (req, res) => {
 
         if (recipe) {
             // Update
-            await recipe.update({ yieldQty, instructions });
+            await recipe.update({ yieldQty, instructions, autoConsumption });
             // Replace ingredients
             await RecipeIngredient.destroy({ where: { recipeId: recipe.id } });
         } else {
             // Create
-            recipe = await Recipe.create({ itemId, variantId, yieldQty, instructions });
+            recipe = await Recipe.create({ itemId, variantId, yieldQty, instructions, autoConsumption });
         }
 
         if (ingredients && ingredients.length > 0) {

@@ -31,6 +31,10 @@ const Recipe = sequelize.define('Recipe', {
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    autoConsumption: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
     }
 });
 
