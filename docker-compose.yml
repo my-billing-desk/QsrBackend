@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    build: .
+    build: ./QsrBackend
     ports:
       - "5001:5001"
     environment:
@@ -10,24 +10,40 @@ services:
       - DB_DIALECT=postgres
       - DB_HOST=db
       - DB_USER=postgres
-      - DB_PASSWORD=password
+      - DB_PASSWORD=postgres
       - DB_NAME=qsr_db
       - JWT_SECRET=dev_secret
     depends_on:
       - db
-    restart: always
+    networks:
+      - qsr-network
+
+  frontend:
+    build: ./QsrWebAdmin
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - qsr-network
 
   db:
     image: postgres:15-alpine
     restart: always
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=qsr_db
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - qsr-network
+
+networks:
+  qsr-network:
+    driver: bridge
 
 volumes:
-  db_data:
+  postgres_data:

@@ -1,12 +1,18 @@
-FROM node:20-slim
+FROM node:18-alpine
+
 WORKDIR /app
 
-# Install dependencies including PostgreSQL client
+# Copy package.json and package-lock.json
 COPY package*.json ./
-RUN npm ci --omit=dev
 
+# Install dependencies
+RUN npm install
+
+# Copy source code
 COPY . .
 
-ENV PORT=5001
+# Expose port
 EXPOSE 5001
-CMD ["node", "server.js"]
+
+# Start the application
+CMD ["npm", "start"]
