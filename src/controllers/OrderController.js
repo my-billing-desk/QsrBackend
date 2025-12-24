@@ -1,9 +1,15 @@
-const { Order, OrderItem, Recipe, RecipeIngredient, RawMaterial } = require('../models');
+const { Order, OrderItem, Recipe, RecipeIngredient, RawMaterial, Setting } = require('../models');
 
 const { Op } = require('sequelize');
 
 // Helper to consume stock
 const consumeStock = async (items) => {
+    // Check Global Auto Consumption Setting
+    const setting = await Setting.findOne({ where: { key: 'auto_consumption_enabled' } });
+    if (setting && setting.value === 'false') {
+        return; // Auto consumption disabled globally
+    }
+
     for (const item of items) {
         try {
             // 1. Find Recipe
