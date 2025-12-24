@@ -4,6 +4,7 @@ const {
     PurchaseReturn, PurchaseReturnItem, Wastage, WastageItem, sequelize,
     Order, OrderItem // Imported for consumption reports
 } = require('../models');
+const { Op } = require('sequelize');
 
 // --- Raw Materials ---
 
@@ -478,48 +479,102 @@ exports.createWastage = async (req, res) => {
 // 1. Stock Summary Report (Daily Report)
 exports.getStockSummaryReport = async (req, res) => {
     try {
-        // For a real production app, this needs a snapshots/ledger table.
-        // Here we derive it from Current Stock - (Movements after Today) + (Movements today)
-        // SIMPLIFICATION: We will return Current Status + Aggregations of ALL TIME for simplicity unless filtered.
-        // Ideally:
-        // Opening = Previous Day Closing.
-        // For MVP: We return current state as "Closing", and back-calculate Opening based on day's transactions.
-
         const { fromDate, toDate } = req.query;
-        // Assume fromDate/toDate logic is applied here for Purchase/Sales filtering.
-        // For this MVP step, we will return a structure based on "Current State" and "Recent Purchases".
+
+        // Date filters
+        const dateFilter = {};
+        if (fromDate && toDate) {
+            dateFilter.createdAt = { [Op.between]: [new Date(fromDate), new Date(toDate + 'T23:59:59')] };
+        } else {
+            // Default to today if not specified, to handle "current" view logic
+            const start = new Date(); start.setHours(0, 0, 0, 0);
+            const end = new Date(); end.setHours(23, 59, 59, 999);
+            dateFilter.createdAt = { [Op.between]: [start, end] };
+        }
 
         const materials = await RawMaterial.findAll();
 
-        // This is a simplified "Daily View" logic
-        const report = await Promise.all(materials.map(async (m) => {
-            // Get today's purchases
-            // const todayPurchases = await PurchaseItem.sum('quantity', { where: { rawMaterialId: m.id, createdAt: ... } });
+        // 1. Calculate Purchases in Range
+        const purchases = await PurchaseItem.findAll({
+            where: dateFilter,
+            attributes: ['rawMaterialId', 'quantity']
+        });
+        const purchaseMap = {};
+        purchases.forEach(p => {
+            purchaseMap[p.rawMaterialId] = (purchaseMap[p.rawMaterialId] || 0) + p.quantity;
+        });
 
-            // Mocking these movements for now as setting up the full date-filtering logic in one go is complex.
-            // Using random or stored values where possible to demonstrate data flow.
+        // 2. Calculate Consumption in Range
+        // We fetch Orders -> Items -> Recipe -> Ingredients
+        // Note: This is computationally heavy for large datasets. Optimization: "ConsumptionLog" table.
+        const orders = await Order.findAll({
+            where: dateFilter,
+            include: [{
+                model: OrderItem,
+                include: [{
+                    model: Item,
+                    include: [{
+                        model: Recipe,
+                        where: { isActive: true },
+                        required: false,
+                        include: [{ model: RecipeIngredient }]
+                    }]
+                }]
+            }]
+        });
+
+        const consumedMap = {};
+        orders.forEach(order => {
+            order.OrderItems.forEach(orderItem => {
+                const item = orderItem.Item;
+                const recipe = item?.Recipes?.[0]; // Taking first active recipe
+
+                // Only count if recipe exists AND autoConsumption is ON
+                // This matches the logic in OrderController.consumeStock
+                if (recipe && recipe.RecipeIngredients && recipe.autoConsumption) {
+                    recipe.RecipeIngredients.forEach(ing => {
+                        const totalQty = (ing.quantity / (recipe.yieldQty || 1)) * orderItem.quantity;
+                        consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + totalQty;
+                    });
+                }
+            });
+        });
+
+        // 3. Build Report
+        const report = materials.map(m => {
+            const purchaseQty = purchaseMap[m.id] || 0;
+            const consumedQty = consumedMap[m.id] || 0;
+            const currentStock = m.currentStock; // This is the state at END of period (approximately)
+
+            // Back-calculate Opening
+            // Closing = Opening + Purchase - Consumed
+            // => Opening = Closing - Purchase + Consumed
+            const openingStock = currentStock - purchaseQty + consumedQty;
 
             return {
                 id: m.id,
                 name: m.name,
                 unit: m.consumptionUnit,
-                opening: m.currentStock * 0.9, // Mock: Yesterday was 90% of today
-                purchase: 10, // Mock
+                opening: openingStock,
+                purchase: purchaseQty,
                 excess: 0,
-                total_in: (m.currentStock * 0.9) + 10,
-                consumed: 5, // Mock
+                totalInput: openingStock + purchaseQty,
+                consumed: consumedQty,
                 wastage: 0,
-                loss: 0,
+                normalLoss: 0,
                 transfer: 0,
                 shortage: 0,
                 conversion: 0,
-                total_out: 5,
-                closing: m.currentStock // This is real
+                totalOutput: consumedQty, // + wastage etc
+                closingStock: currentStock, // Actual
+                closingSummary: currentStock,
+                difference: 0
             };
-        }));
+        });
 
         res.json(report);
     } catch (error) {
+        console.error("Stock Summary Error:", error);
         res.status(500).json({ error: error.message });
     }
 };
