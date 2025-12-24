@@ -511,6 +511,7 @@ exports.getStockSummaryReport = async (req, res) => {
             where: dateFilter,
             include: [{
                 model: OrderItem,
+                as: 'items',
                 include: [{
                     model: Item,
                     include: [{
@@ -525,19 +526,21 @@ exports.getStockSummaryReport = async (req, res) => {
 
         const consumedMap = {};
         orders.forEach(order => {
-            order.OrderItems.forEach(orderItem => {
-                const item = orderItem.Item;
-                const recipe = item?.Recipes?.[0]; // Taking first active recipe
+            if (order.items) {
+                order.items.forEach(orderItem => {
+                    const item = orderItem.Item;
+                    const recipe = item?.Recipe;
 
-                // Only count if recipe exists AND autoConsumption is ON
-                // This matches the logic in OrderController.consumeStock
-                if (recipe && recipe.RecipeIngredients && recipe.autoConsumption !== false) {
-                    recipe.RecipeIngredients.forEach(ing => {
-                        const totalQty = (ing.quantity / (recipe.yieldQty || 1)) * orderItem.quantity;
-                        consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + totalQty;
-                    });
-                }
-            });
+                    // Only count if recipe exists AND autoConsumption is ON
+                    // This matches the logic in OrderController.consumeStock
+                    if (recipe && recipe.RecipeIngredients && recipe.autoConsumption !== false) {
+                        recipe.RecipeIngredients.forEach(ing => {
+                            const totalQty = (ing.quantity / (recipe.yieldQty || 1)) * orderItem.quantity;
+                            consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + totalQty;
+                        });
+                    }
+                });
+            }
         });
 
         // 3. Build Report
