@@ -31,6 +31,7 @@ router.post('/returns', InventoryController.createPurchaseReturn);
 
 // Stats
 router.get('/stats', InventoryController.getInventoryStats);
+router.post('/closing-stock', InventoryController.updateClosingStock);
 router.get('/reports/closing-stock', InventoryController.getClosingStockReport);
 router.get('/reports/stock-summary', InventoryController.getStockSummaryReport); // New Endpoint
 router.get('/reports/order-consumption', InventoryController.getOrderWiseConsumptionReport); // New Endpoint

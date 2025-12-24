@@ -688,3 +688,24 @@ exports.getConsumptionSummaryReport = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+exports.updateClosingStock = async (req, res) => {
+    try {
+        const { updates } = req.body;
+        
+        if (!updates || !Array.isArray(updates)) {
+            return res.status(400).json({ error: 'Invalid updates format' });
+        }
+
+        const promises = updates.map(async (update) => {
+            const material = await RawMaterial.findByPk(update.id);
+            if (material) {
+                await material.update({ currentStock: update.closingStock });
+            }
+        });
+
+        await Promise.all(promises);
+        res.json({ message: 'Closing stock updated successfully', count: updates.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
