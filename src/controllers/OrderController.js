@@ -32,8 +32,8 @@ const consumeStock = async (items) => {
 
             // 2. Consume Ingredients
             if (recipe && recipe.RecipeIngredients) {
-                // Check if Auto Consumption is enabled
-                if (recipe.autoConsumption) {
+                // Check if Auto Consumption is enabled (Default to true if null/undefined)
+                if (recipe.autoConsumption !== false) {
                     for (const ingredient of recipe.RecipeIngredients) {
                         const yieldQty = recipe.yieldQty || 1;
                         const consumption = (ingredient.quantity / yieldQty) * item.quantity;

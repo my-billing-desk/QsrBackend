@@ -531,7 +531,7 @@ exports.getStockSummaryReport = async (req, res) => {
 
                 // Only count if recipe exists AND autoConsumption is ON
                 // This matches the logic in OrderController.consumeStock
-                if (recipe && recipe.RecipeIngredients && recipe.autoConsumption) {
+                if (recipe && recipe.RecipeIngredients && recipe.autoConsumption !== false) {
                     recipe.RecipeIngredients.forEach(ing => {
                         const totalQty = (ing.quantity / (recipe.yieldQty || 1)) * orderItem.quantity;
                         consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + totalQty;
