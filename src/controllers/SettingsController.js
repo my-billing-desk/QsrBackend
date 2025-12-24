@@ -12,7 +12,14 @@ exports.getSettings = async (req, res) => {
         // Provide defaults if not set
         const defaults = {
             'gst_mode': 'exclusive', // 'inclusive' or 'exclusive' (backward/forward)
-            'gst_percentage': '5'
+            'gst_percentage': '5',
+            'shifts_enabled': 'false',
+            'open_tickets_enabled': 'false',
+            'kitchen_printers_enabled': 'false',
+            'customer_displays_enabled': 'false',
+            'dining_options_enabled': 'false',
+            'low_stock_notifications_enabled': 'false',
+            'negative_stock_alerts_enabled': 'false'
         };
 
         res.json({ ...defaults, ...settingsMap });
