@@ -18,6 +18,7 @@ const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const aggregatorRoutes = require('./src/routes/aggregatorRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
 const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
+const onboardingRoutes = require('./src/routes/onboardingRoutes');
 
 // Middleware
 // Explicit manual CORS
@@ -70,6 +71,7 @@ mount('/inventory', inventoryRoutes);
 mount('/aggregators', aggregatorRoutes);
 mount('/reports', reportRoutes);
 mount('/special-notes', specialNoteRoutes);
+mount('/onboarding', onboardingRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running (Root)' });

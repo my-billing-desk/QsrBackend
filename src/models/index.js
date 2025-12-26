@@ -12,6 +12,7 @@ const SpecialNote = require('./SpecialNote');
 
 const Discount = require('./Discount');
 const Setting = require('./Setting');
+const Tenant = require('./Tenant');
 const AddonGroup = require('./AddonGroup');
 const VariationGroup = require('./VariationGroup');
 const ItemAddonGroup = require('./ItemAddonGroup');
@@ -111,6 +112,7 @@ module.exports = {
     Tax,
     Discount,
     Setting,
+    Tenant,
     AddonGroup,
     VariationGroup,
     ItemAddonGroup,

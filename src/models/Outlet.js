@@ -35,7 +35,11 @@ const Outlet = sequelize.define('Outlet', {
     fssaiLicNo: { type: DataTypes.STRING },
     taxAuthorityName: { type: DataTypes.STRING, defaultValue: 'GST' },
     outletServingType: { type: DataTypes.STRING }, // Service, Goods, Both
-    enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true }
+    enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
+    }
 });
 
 module.exports = Outlet;

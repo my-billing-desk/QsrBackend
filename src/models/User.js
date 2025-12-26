@@ -38,6 +38,10 @@ const User = sequelize.define('User', {
     permissions: {
         type: DataTypes.JSON, // Stores permissions as a JSON object
         allowNull: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

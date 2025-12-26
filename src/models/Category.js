@@ -35,6 +35,10 @@ const Category = sequelize.define('Category', {
     sortOrder: {
         type: DataTypes.INTEGER,
         defaultValue: 0
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

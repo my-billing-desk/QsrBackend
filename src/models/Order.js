@@ -79,6 +79,10 @@ const Order = sequelize.define('Order', {
     printBillRequested: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

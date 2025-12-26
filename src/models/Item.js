@@ -124,6 +124,10 @@ const Item = sequelize.define('Item', {
     showImage: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

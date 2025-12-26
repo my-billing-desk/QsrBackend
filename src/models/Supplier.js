@@ -39,6 +39,10 @@ const Supplier = sequelize.define('Supplier', {
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

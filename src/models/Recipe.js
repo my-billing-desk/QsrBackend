@@ -35,6 +35,10 @@ const Recipe = sequelize.define('Recipe', {
     autoConsumption: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

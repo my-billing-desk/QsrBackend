@@ -144,6 +144,10 @@ const RawMaterial = sequelize.define('RawMaterial', {
     exciseBrand: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

@@ -64,6 +64,10 @@ const Purchase = sequelize.define('Purchase', {
     notes: {
         type: DataTypes.TEXT,
         allowNull: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: false
     }
 });
 

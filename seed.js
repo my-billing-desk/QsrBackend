@@ -1,7 +1,7 @@
 const {
     sequelize, User, Category, Item, Variant,
     RawMaterial, Supplier, Purchase, PurchaseItem,
-    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet
+    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant
 } = require('./src/models');
 const bcrypt = require('bcryptjs');
 
@@ -11,7 +11,15 @@ async function seed() {
 
         console.log('--- Starting Seed ---');
 
-        // 1. Users
+        // 1. Tenant
+        console.log('Seeding Tenant...');
+        const [tenant] = await Tenant.findOrCreate({
+            where: { subdomain: 'default' },
+            defaults: { name: 'Default Restaurant', status: 'active', subscriptionPlan: 'enterprise' }
+        });
+        const tenantId = tenant.id;
+
+        // 2. Users
         const adminExists = await User.findOne({ where: { username: 'guna' } });
         if (!adminExists) {
             console.log('Seeding default admin user...');
@@ -20,7 +28,8 @@ async function seed() {
                 password: 'king123',
                 role: 'super_admin',
                 displayName: 'Super Admin',
-                email: 'guna.swtkiller@gmail.com'
+                email: 'guna.swtkiller@gmail.com',
+                tenantId: tenantId
             });
         } else {
             console.log('Admin user exists.');
@@ -28,17 +37,17 @@ async function seed() {
 
         // 2. Categories
         console.log('Seeding Categories...');
-        const catBeverages = await Category.create({ name: 'Beverages', icon: '🥤', sortOrder: 1, station: 'Bar' });
-        const catStarters = await Category.create({ name: 'Starters', icon: '🍟', sortOrder: 2, station: 'Kitchen' }); // Default
-        const catMainCourse = await Category.create({ name: 'Main Course', icon: '🍛', sortOrder: 3, station: 'Kitchen' });
-        const catBreads = await Category.create({ name: 'Breads', icon: '🍞', sortOrder: 4, station: 'Tandoor' });
-        const catDesserts = await Category.create({ name: 'Desserts', icon: '🍰', sortOrder: 5, station: 'Kitchen' });
-        const catPizzas = await Category.create({ name: 'Pizzas', icon: '🍕', sortOrder: 6, station: 'Kitchen' });
-        const catChinese = await Category.create({ name: 'Chinese', icon: '🥢', sortOrder: 7, station: 'Chinese' });
-        const catSouthIndian = await Category.create({ name: 'South Indian', icon: '🥘', sortOrder: 8, station: 'Kitchen' });
-        const catShakes = await Category.create({ name: 'Shakes', icon: '🥤', sortOrder: 9, station: 'Bar' });
-        const catBurgers = await Category.create({ name: 'Burgers', icon: '🍔', sortOrder: 10, station: 'Kitchen' });
-        const catTandoorStarters = await Category.create({ name: 'Tandoor Starters', icon: '🍗', sortOrder: 11, station: 'Tandoor' });
+        const catBeverages = await Category.create({ name: 'Beverages', icon: '🥤', sortOrder: 1, station: 'Bar', tenantId: tenantId });
+        const catStarters = await Category.create({ name: 'Starters', icon: '🍟', sortOrder: 2, station: 'Kitchen', tenantId: tenantId }); // Default
+        const catMainCourse = await Category.create({ name: 'Main Course', icon: '🍛', sortOrder: 3, station: 'Kitchen', tenantId: tenantId });
+        const catBreads = await Category.create({ name: 'Breads', icon: '🍞', sortOrder: 4, station: 'Tandoor', tenantId: tenantId });
+        const catDesserts = await Category.create({ name: 'Desserts', icon: '🍰', sortOrder: 5, station: 'Kitchen', tenantId: tenantId });
+        const catPizzas = await Category.create({ name: 'Pizzas', icon: '🍕', sortOrder: 6, station: 'Kitchen', tenantId: tenantId });
+        const catChinese = await Category.create({ name: 'Chinese', icon: '🥢', sortOrder: 7, station: 'Chinese', tenantId: tenantId });
+        const catSouthIndian = await Category.create({ name: 'South Indian', icon: '🥘', sortOrder: 8, station: 'Kitchen', tenantId: tenantId });
+        const catShakes = await Category.create({ name: 'Shakes', icon: '🥤', sortOrder: 9, station: 'Bar', tenantId: tenantId });
+        const catBurgers = await Category.create({ name: 'Burgers', icon: '🍔', sortOrder: 10, station: 'Kitchen', tenantId: tenantId });
+        const catTandoorStarters = await Category.create({ name: 'Tandoor Starters', icon: '🍗', sortOrder: 11, station: 'Tandoor', tenantId: tenantId });
 
         console.log('Seeding Raw Materials...');
         // Inferring ingredients for the items
@@ -57,6 +66,7 @@ async function seed() {
 
         const materials = {};
         for (const m of materialsData) {
+            m.tenantId = tenantId;
             const [mat] = await RawMaterial.findOrCreate({ where: { name: m.name }, defaults: m });
             materials[m.name] = mat;
             // Force update stock
@@ -67,7 +77,7 @@ async function seed() {
         console.log('Seeding Suppliers...');
         const [supplier1] = await Supplier.findOrCreate({
             where: { name: 'Fresh Foods Co' },
-            defaults: { contactPerson: 'Bob', phone: '1234567890', email: 'bob@fresh.com' }
+            defaults: { contactPerson: 'Bob', phone: '1234567890', email: 'bob@fresh.com', tenantId: tenantId }
         });
 
         // 5. Menu Items (Matching Screenshots)
@@ -76,64 +86,64 @@ async function seed() {
         // Spicy Paneer Wrap (141.90)
         const [paneerWrap] = await Item.findOrCreate({
             where: { name: 'Spicy Paneer Wrap' },
-            defaults: { categoryId: catStarters.id, price: 141.90, shortCode: 'SPW', isVeg: true, description: 'Spicy delight' }
+            defaults: { categoryId: catStarters.id, price: 141.90, shortCode: 'SPW', isVeg: true, tenantId: tenantId, description: 'Spicy delight' }
         });
 
         // Aloo Tikki Burger (37.14)
         const [alooTikki] = await Item.findOrCreate({
             where: { name: 'Aloo Tikki Burger' },
-            defaults: { categoryId: catBurgers.id, price: 37.14, shortCode: 'ATB', isVeg: true }
+            defaults: { categoryId: catBurgers.id, price: 37.14, shortCode: 'ATB', isVeg: true, tenantId: tenantId }
         });
 
         // Veg Wrap (120.00) - Mapped to Burgers for now or create Wraps if needed. Let's map to 'Starters' as per new list or Burgers.
         // Actually, user had Wraps before. Let's map to 'Starters' to be safe and simple.
         const [vegWrap] = await Item.findOrCreate({
             where: { name: 'Veg Wrap' },
-            defaults: { categoryId: catStarters.id, price: 120.00, shortCode: 'VWRAP', isVeg: true }
+            defaults: { categoryId: catStarters.id, price: 120.00, shortCode: 'VWRAP', isVeg: true, tenantId: tenantId }
         });
 
         // Coke 250ml (19.05)
         const [coke] = await Item.findOrCreate({
             where: { name: 'Coke 250ml' },
-            defaults: { categoryId: catBeverages.id, price: 19.05, shortCode: 'COKE', isVeg: true }
+            defaults: { categoryId: catBeverages.id, price: 19.05, shortCode: 'COKE', isVeg: true, tenantId: tenantId }
         });
 
         // Blue Curacao Mojito (46.67)
         const [blueMojito] = await Item.findOrCreate({
             where: { name: 'Blue Curacao Mojito' },
-            defaults: { categoryId: catBeverages.id, price: 46.67, shortCode: 'BCM', isVeg: true }
+            defaults: { categoryId: catBeverages.id, price: 46.67, shortCode: 'BCM', isVeg: true, tenantId: tenantId }
         });
 
         // Lemon Mint Mojito (46.67)
         const [lemonMojito] = await Item.findOrCreate({
             where: { name: 'Lemon Mint Mojito' },
-            defaults: { categoryId: catBeverages.id, price: 46.67, shortCode: 'LMM', isVeg: true }
+            defaults: { categoryId: catBeverages.id, price: 46.67, shortCode: 'LMM', isVeg: true, tenantId: tenantId }
         });
 
         // Oreo Shake (108.57)
         const [oreoShake] = await Item.findOrCreate({
             where: { name: 'Oreo Shake' },
-            defaults: { categoryId: catShakes.id, price: 108.57, shortCode: 'OREO', isVeg: true }
+            defaults: { categoryId: catShakes.id, price: 108.57, shortCode: 'OREO', isVeg: true, tenantId: tenantId }
         });
 
         // Aloo Tikki Burger Combos (119.00)
         const [alooBurger] = await Item.findOrCreate({
             where: { name: 'Aloo Tikki Burger Combos' },
-            defaults: { categoryId: catBurgers.id, price: 119.00, shortCode: 'ATBC', isVeg: true }
+            defaults: { categoryId: catBurgers.id, price: 119.00, shortCode: 'ATBC', isVeg: true, tenantId: tenantId }
         });
 
 
         // 6. Recipes (Linking Items to Materials)
         console.log('Seeding Recipes...');
 
-        const paneerWrapRecipe = await Recipe.create({ itemId: paneerWrap.id, yieldQty: 1 });
+        const paneerWrapRecipe = await Recipe.create({ itemId: paneerWrap.id, yieldQty: 1, tenantId: tenantId });
         await RecipeIngredient.create({ recipeId: paneerWrapRecipe.id, rawMaterialId: materials['Paneer'].id, quantity: 100, unit: 'Gram' });
         await RecipeIngredient.create({ recipeId: paneerWrapRecipe.id, rawMaterialId: materials['Wrap Base'].id, quantity: 1, unit: 'Piece' });
 
-        const blueMojitoRecipe = await Recipe.create({ itemId: blueMojito.id, yieldQty: 1 });
+        const blueMojitoRecipe = await Recipe.create({ itemId: blueMojito.id, yieldQty: 1, tenantId: tenantId });
         await RecipeIngredient.create({ recipeId: blueMojitoRecipe.id, rawMaterialId: materials['Mojito Syrup'].id, quantity: 30, unit: 'Milliliter' });
 
-        const lemonMojitoRecipe = await Recipe.create({ itemId: lemonMojito.id, yieldQty: 1 });
+        const lemonMojitoRecipe = await Recipe.create({ itemId: lemonMojito.id, yieldQty: 1, tenantId: tenantId });
         await RecipeIngredient.create({ recipeId: lemonMojitoRecipe.id, rawMaterialId: materials['Lemon'].id, quantity: 1, unit: 'Piece' });
         await RecipeIngredient.create({ recipeId: lemonMojitoRecipe.id, rawMaterialId: materials['Mint Leaves'].id, quantity: 5, unit: 'Gram' });
 
@@ -152,7 +162,8 @@ async function seed() {
             invoiceNumber: 'INV-SEED-001',
             invoiceDate: new Date(),
             totalAmount: 5000,
-            status: 'Completed'
+            status: 'Completed',
+            tenantId: tenantId
         });
         await PurchaseItem.create({ purchaseId: purchase.id, rawMaterialId: materials['Paneer'].id, quantity: 10, unit: 'Kg', price: 400, amount: 4000 });
 
@@ -173,7 +184,7 @@ async function seed() {
             customerName: '-', // Screenshot shows "-"
             totalAmount: 659.00,
             taxAmount: 31.38,
-            createdAt: new Date('2025-12-13T14:41:48')
+            createdAt: new Date('2025-12-13T14:41:48'), tenantId: tenantId
         });
 
         await OrderItem.create({ orderId: order2504.id, itemId: paneerWrap.id, itemName: paneerWrap.name, quantity: 3, price: 141.90, total: 425.70 });
@@ -191,7 +202,7 @@ async function seed() {
             status: 'completed',
             paymentStatus: 'paid',
             totalAmount: 119.00,
-            createdAt: new Date('2025-12-13T14:30:49')
+            createdAt: new Date('2025-12-13T14:30:49'), tenantId: tenantId
         });
 
         await OrderItem.create({ orderId: order2503.id, itemId: alooBurger.id, itemName: alooBurger.name, quantity: 1, price: 119.00, total: 119.00 });
@@ -235,7 +246,8 @@ async function seed() {
             fssaiLicNo: '21223180000833',
             taxAuthorityName: 'GST',
             outletServingType: 'Service',
-            enableKOTForOnlineOrder: true
+            enableKOTForOnlineOrder: true,
+            tenantId: tenantId
         });
 
 
