@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const SettingsController = require('../controllers/SettingsController');
 
-router.get('/', SettingsController.getSettings);
-router.post('/', SettingsController.updateSettings);
+const { protect } = require('../middleware/authMiddleware');
+
+router.get('/', protect, SettingsController.getSettings);
+router.post('/', protect, SettingsController.updateSettings);
 
 module.exports = router;

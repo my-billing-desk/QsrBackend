@@ -127,7 +127,7 @@ const Item = sequelize.define('Item', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

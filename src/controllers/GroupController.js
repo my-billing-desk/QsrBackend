@@ -5,6 +5,7 @@ const { AddonGroup, VariationGroup, Addon, Variant, Item, ItemAddonGroup, ItemVa
 exports.getAddonGroups = async (req, res) => {
     try {
         const groups = await AddonGroup.findAll({
+            where: { tenantId: req.tenantId },
             include: [Addon],
             order: [[Addon, 'sortOrder', 'ASC'], [Addon, 'id', 'ASC']]
         });
@@ -20,7 +21,7 @@ exports.createAddonGroup = async (req, res) => {
         // addons is expected to be an array of { name, price, type, sortOrder }
 
         const group = await AddonGroup.create({
-            name, description, minSelection, maxSelection
+            name, description, minSelection, maxSelection, tenantId: req.tenantId
         });
 
         if (addons && addons.length > 0) {
@@ -45,7 +46,7 @@ exports.createAddonGroup = async (req, res) => {
 exports.deleteAddonGroup = async (req, res) => {
     try {
         const { id } = req.params;
-        await AddonGroup.destroy({ where: { id } });
+        await AddonGroup.destroy({ where: { id, tenantId: req.tenantId } });
         res.json({ message: 'Addon Group deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -57,6 +58,7 @@ exports.deleteAddonGroup = async (req, res) => {
 exports.getVariationGroups = async (req, res) => {
     try {
         const groups = await VariationGroup.findAll({
+            where: { tenantId: req.tenantId },
             include: [{
                 model: Variant,
                 where: { itemId: null },
@@ -76,7 +78,7 @@ exports.createVariationGroup = async (req, res) => {
         // variants is expected to be an array of { name, price, sapCode, ... }
 
         const group = await VariationGroup.create({
-            name, description, onlineDisplayName, departmentName, isActive
+            name, description, onlineDisplayName, departmentName, isActive, tenantId: req.tenantId
         });
 
         if (variants && variants.length > 0) {
@@ -104,7 +106,7 @@ exports.updateVariationGroup = async (req, res) => {
         const { id } = req.params;
         const { name, departmentName, onlineDisplayName, isActive, variants } = req.body;
 
-        const group = await VariationGroup.findByPk(id);
+        const group = await VariationGroup.findOne({ where: { id, tenantId: req.tenantId } });
         if (!group) {
             await t.rollback();
             return res.status(404).json({ error: 'Group not found' });
@@ -142,7 +144,7 @@ exports.updateVariationGroup = async (req, res) => {
 exports.deleteVariationGroup = async (req, res) => {
     try {
         const { id } = req.params;
-        await VariationGroup.destroy({ where: { id } });
+        await VariationGroup.destroy({ where: { id, tenantId: req.tenantId } });
         res.json({ message: 'Variation Group deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -155,7 +157,7 @@ exports.assignGroupsToItem = async (req, res) => {
     try {
         const { itemId, addonGroupIds, variationGroupIds } = req.body;
 
-        const item = await Item.findByPk(itemId);
+        const item = await Item.findOne({ where: { id: itemId, tenantId: req.tenantId } });
         if (!item) return res.status(404).json({ error: 'Item not found' });
 
         if (addonGroupIds) {

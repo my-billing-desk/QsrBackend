@@ -147,7 +147,7 @@ const RawMaterial = sequelize.define('RawMaterial', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

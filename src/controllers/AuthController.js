@@ -23,12 +23,12 @@ exports.login = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, role: user.role, name: user.displayName },
+            { id: user.id, role: user.role, name: user.displayName, tenantId: user.tenantId },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        res.json({ token, user: { id: user.id, username: user.username, role: user.role, name: user.displayName } });
+        res.json({ token, user: { id: user.id, username: user.username, role: user.role, name: user.displayName, tenantId: user.tenantId } });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

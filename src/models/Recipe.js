@@ -38,7 +38,7 @@ const Recipe = sequelize.define('Recipe', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

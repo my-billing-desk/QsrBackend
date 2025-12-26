@@ -2,43 +2,45 @@ const express = require('express');
 const router = express.Router();
 const InventoryController = require('../controllers/InventoryController');
 
+const { protect } = require('../middleware/authMiddleware');
+
 // Raw Materials
-router.get('/materials', InventoryController.getRawMaterials);
-router.get('/materials/:id', InventoryController.getRawMaterialById);
-router.post('/materials', InventoryController.createRawMaterial);
-router.put('/materials/:id', InventoryController.updateRawMaterial);
-router.delete('/materials/:id', InventoryController.deleteRawMaterial);
+router.get('/materials', protect, InventoryController.getRawMaterials);
+router.get('/materials/:id', protect, InventoryController.getRawMaterialById);
+router.post('/materials', protect, InventoryController.createRawMaterial);
+router.put('/materials/:id', protect, InventoryController.updateRawMaterial);
+router.delete('/materials/:id', protect, InventoryController.deleteRawMaterial);
 
 // Recipes
-router.get('/recipes', InventoryController.getRecipes);
-router.get('/recipe', InventoryController.getRecipeByItem); // ?itemId=1
-router.post('/recipes', InventoryController.saveRecipe);
-router.delete('/recipes/:id', InventoryController.deleteRecipe);
+router.get('/recipes', protect, InventoryController.getRecipes);
+router.get('/recipe', protect, InventoryController.getRecipeByItem); // ?itemId=1
+router.post('/recipes', protect, InventoryController.saveRecipe);
+router.delete('/recipes/:id', protect, InventoryController.deleteRecipe);
 
 // Procurement
-router.get('/suppliers', InventoryController.getSuppliers);
-router.post('/suppliers', InventoryController.createSupplier);
+router.get('/suppliers', protect, InventoryController.getSuppliers);
+router.post('/suppliers', protect, InventoryController.createSupplier);
 
-router.get('/purchases', InventoryController.getPurchases);
-router.post('/purchases', InventoryController.createPurchase);
+router.get('/purchases', protect, InventoryController.getPurchases);
+router.post('/purchases', protect, InventoryController.createPurchase);
 
-router.get('/orders', InventoryController.getPurchaseOrders);
-router.post('/orders', InventoryController.createPurchaseOrder);
-router.post('/orders/:id/receive', InventoryController.receivePurchaseOrder);
+router.get('/orders', protect, InventoryController.getPurchaseOrders);
+router.post('/orders', protect, InventoryController.createPurchaseOrder);
+router.post('/orders/:id/receive', protect, InventoryController.receivePurchaseOrder);
 
-router.get('/returns', InventoryController.getPurchaseReturns);
-router.post('/returns', InventoryController.createPurchaseReturn);
+router.get('/returns', protect, InventoryController.getPurchaseReturns);
+router.post('/returns', protect, InventoryController.createPurchaseReturn);
 
 // Stats
-router.get('/stats', InventoryController.getInventoryStats);
-router.post('/closing-stock', InventoryController.updateClosingStock);
-router.get('/reports/closing-stock', InventoryController.getClosingStockReport);
-router.get('/reports/stock-summary', InventoryController.getStockSummaryReport); // New Endpoint
-router.get('/reports/order-consumption', InventoryController.getOrderWiseConsumptionReport); // New Endpoint
-router.get('/reports/consumption-summary', InventoryController.getConsumptionSummaryReport); // New Endpoint
+router.get('/stats', protect, InventoryController.getInventoryStats);
+router.post('/closing-stock', protect, InventoryController.updateClosingStock);
+router.get('/reports/closing-stock', protect, InventoryController.getClosingStockReport);
+router.get('/reports/stock-summary', protect, InventoryController.getStockSummaryReport); // New Endpoint
+router.get('/reports/order-consumption', protect, InventoryController.getOrderWiseConsumptionReport); // New Endpoint
+router.get('/reports/consumption-summary', protect, InventoryController.getConsumptionSummaryReport); // New Endpoint
 
 // Wastage
-router.get('/wastage', InventoryController.getWastages);
-router.post('/wastage', InventoryController.createWastage);
+router.get('/wastage', protect, InventoryController.getWastages);
+router.post('/wastage', protect, InventoryController.createWastage);
 
 module.exports = router;

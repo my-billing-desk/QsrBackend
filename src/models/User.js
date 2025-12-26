@@ -41,7 +41,7 @@ const User = sequelize.define('User', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

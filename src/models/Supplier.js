@@ -42,7 +42,7 @@ const Supplier = sequelize.define('Supplier', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

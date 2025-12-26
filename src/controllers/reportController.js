@@ -21,7 +21,8 @@ exports.getProfitLoss = async (req, res) => {
                 status: { [Op.not]: 'cancelled' },
                 createdAt: {
                     [Op.between]: [start, end]
-                }
+                },
+                tenantId: req.tenantId
             },
             group: [
                 sequelize.fn('strftime', '%Y-%m', sequelize.col('createdAt')),
@@ -40,7 +41,8 @@ exports.getProfitLoss = async (req, res) => {
             where: {
                 invoiceDate: {
                     [Op.between]: [start, end]
-                }
+                },
+                tenantId: req.tenantId
             },
             group: [sequelize.fn('strftime', '%Y-%m', sequelize.col('invoiceDate'))],
             order: [[sequelize.col('month'), 'DESC']]

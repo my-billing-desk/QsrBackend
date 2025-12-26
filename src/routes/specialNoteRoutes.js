@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 const specialNoteController = require('../controllers/specialNoteController');
 
-router.get('/', specialNoteController.getAll);
-router.post('/', specialNoteController.create);
-router.put('/:id', specialNoteController.update);
-router.delete('/:id', specialNoteController.delete);
-router.patch('/:id/toggle', specialNoteController.toggleStatus);
+const { protect } = require('../middleware/authMiddleware');
+
+router.get('/', protect, specialNoteController.getAll);
+router.post('/', protect, specialNoteController.create);
+router.put('/:id', protect, specialNoteController.update);
+router.delete('/:id', protect, specialNoteController.delete);
+router.patch('/:id/toggle', protect, specialNoteController.toggleStatus);
 
 module.exports = router;

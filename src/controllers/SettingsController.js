@@ -2,7 +2,7 @@ const { Setting } = require('../models');
 
 exports.getSettings = async (req, res) => {
     try {
-        const settings = await Setting.findAll();
+        const settings = await Setting.findAll({ where: { tenantId: req.tenantId } });
         // Convert to object for easier consumption
         const settingsMap = settings.reduce((acc, curr) => {
             acc[curr.key] = curr.value;
@@ -35,8 +35,8 @@ exports.updateSettings = async (req, res) => {
 
         for (const [key, value] of Object.entries(updates)) {
             const [setting, created] = await Setting.findOrCreate({
-                where: { key },
-                defaults: { value: String(value) }
+                where: { key, tenantId: req.tenantId },
+                defaults: { value: String(value), tenantId: req.tenantId }
             });
 
             if (!created) {

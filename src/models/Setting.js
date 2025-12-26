@@ -9,8 +9,7 @@ const Setting = sequelize.define('Setting', {
     },
     key: {
         type: DataTypes.STRING,
-        allowNull: false,
-        unique: true
+        allowNull: false
     },
     value: {
         type: DataTypes.STRING, // Storing as string, parse as needed
@@ -19,6 +18,10 @@ const Setting = sequelize.define('Setting', {
     description: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    tenantId: {
+        type: DataTypes.UUID,
+        allowNull: true // Allow null for migration safety, enforce in logic
     }
 });
 

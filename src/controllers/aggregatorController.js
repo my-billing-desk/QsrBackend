@@ -2,7 +2,7 @@ const { Aggregator } = require('../models');
 
 exports.getAll = async (req, res) => {
     try {
-        const aggregators = await Aggregator.findAll();
+        const aggregators = await Aggregator.findAll({ where: { tenantId: req.tenantId } });
         res.json(aggregators);
     } catch (error) {
         res.status(500).json({ message: "Error fetching aggregators", error });
@@ -12,7 +12,7 @@ exports.getAll = async (req, res) => {
 exports.toggleStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const aggregator = await Aggregator.findByPk(id);
+        const aggregator = await Aggregator.findOne({ where: { id, tenantId: req.tenantId } });
         if (!aggregator) return res.status(404).json({ message: "Aggregator not found" });
 
         aggregator.isConnected = !aggregator.isConnected;

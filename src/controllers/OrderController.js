@@ -58,7 +58,7 @@ exports.getOrders = async (req, res) => {
     try {
         const { startDate, endDate, orderNumber, type, status, paymentMode, customerName } = req.query;
 
-        let whereClause = {};
+        let whereClause = { tenantId: req.tenantId };
 
         // Date Range Filter
         if (startDate && endDate) {
@@ -114,7 +114,7 @@ exports.createOrder = async (req, res) => {
         const activeTotal = orderData.totalAmount;
 
         // Create Order
-        const order = await Order.create(orderData);
+        const order = await Order.create({ ...orderData, tenantId: req.tenantId });
 
         // Create Order Items
         if (items && items.length > 0) {
@@ -159,7 +159,7 @@ exports.updateSync = async (req, res) => {
         for (const orderData of orders) {
             // Find or Create logic based on unique orderNumber
             // Simplified for MVP: Just create if not exists
-            const existing = await Order.findOne({ where: { orderNumber: orderData.orderNumber } });
+            const existing = await Order.findOne({ where: { orderNumber: orderData.orderNumber, tenantId: req.tenantId } });
             if (!existing) {
                 // Create logic similar to single order but tailored
                 // ...
@@ -176,7 +176,7 @@ exports.updateOrder = async (req, res) => {
         const { id } = req.params;
         const { items, ...updateData } = req.body;
 
-        const order = await Order.findByPk(id);
+        const order = await Order.findOne({ where: { id, tenantId: req.tenantId } });
         if (!order) {
             return res.status(404).json({ error: 'Order not found' });
         }
@@ -208,7 +208,8 @@ exports.updateOrder = async (req, res) => {
         }
 
         // Return updated order with items
-        const updatedOrder = await Order.findByPk(id, {
+        const updatedOrder = await Order.findOne({
+            where: { id, tenantId: req.tenantId },
             include: [{ model: OrderItem, as: 'items' }]
         });
 
@@ -221,7 +222,7 @@ exports.updateOrder = async (req, res) => {
 exports.markKotPrinted = async (req, res) => {
     try {
         const { id } = req.body;
-        const order = await Order.findByPk(id);
+        const order = await Order.findOne({ where: { id, tenantId: req.tenantId } });
         if (!order) return res.status(404).json({ error: 'Order not found' });
 
         await order.update({ isKotPrinted: true });

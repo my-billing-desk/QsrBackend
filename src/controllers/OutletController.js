@@ -2,10 +2,12 @@ const { Outlet } = require('../models');
 
 exports.getOutletConfig = async (req, res) => {
     try {
-        // Assuming single outlet for now, get the first one
-        let outlet = await Outlet.findOne();
+        if (!req.tenantId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        // Get config for this tenant
+        let outlet = await Outlet.findOne({ where: { tenantId: req.tenantId } });
         if (!outlet) {
-            // Return empty object or default structure if not initialized
+            // Return empty object if not initialized
             return res.json({ success: true, data: {} });
         }
         res.json({ success: true, data: outlet });
@@ -17,15 +19,13 @@ exports.getOutletConfig = async (req, res) => {
 
 exports.updateOutletConfig = async (req, res) => {
     try {
-        const { id, ...updateData } = req.body;
-        let outlet;
+        if (!req.tenantId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-        if (id) {
-            outlet = await Outlet.findByPk(id);
-        } else {
-            // Try enabling findOne if no ID but exists
-            outlet = await Outlet.findOne();
-        }
+        const { id, ...updateData } = req.body;
+        // Ensure tenantId is set
+        updateData.tenantId = req.tenantId;
+
+        let outlet = await Outlet.findOne({ where: { tenantId: req.tenantId } });
 
         if (outlet) {
             await outlet.update(updateData);

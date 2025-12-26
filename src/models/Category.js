@@ -38,7 +38,7 @@ const Category = sequelize.define('Category', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

@@ -38,7 +38,7 @@ const Outlet = sequelize.define('Outlet', {
     enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

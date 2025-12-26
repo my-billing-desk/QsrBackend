@@ -67,7 +67,7 @@ const Purchase = sequelize.define('Purchase', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

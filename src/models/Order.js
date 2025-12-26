@@ -82,7 +82,7 @@ const Order = sequelize.define('Order', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: false
+        allowNull: true
     }
 });
 

@@ -5,6 +5,7 @@ const { Category, Item, Variant, Addon, AddonGroup, VariationGroup, sequelize } 
 exports.getCategories = async (req, res) => {
     try {
         const categories = await Category.findAll({
+            where: { tenantId: req.tenantId },
             order: [['sortOrder', 'ASC'], ['id', 'ASC']]
         });
         res.json(categories);
@@ -66,6 +67,7 @@ exports.reorderMenuItems = async (req, res) => {
 exports.getItems = async (req, res) => {
     try {
         const items = await Item.findAll({
+            where: { tenantId: req.tenantId },
             include: [
                 Category,
                 {

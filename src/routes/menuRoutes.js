@@ -3,12 +3,14 @@ const router = express.Router();
 const controller = require('../controllers/MenuController');
 const upload = require('../middleware/upload');
 
-router.get('/categories', controller.getCategories);
-router.post('/categories', controller.createCategory);
+const { protect } = require('../middleware/authMiddleware');
+
+router.get('/categories', protect, controller.getCategories);
+router.post('/categories', protect, controller.createCategory);
 router.delete('/categories/:id', controller.deleteCategory);
 
-router.get('/items', controller.getItems);
-router.post('/items', upload.single('image'), controller.createItem);
+router.get('/items', protect, controller.getItems);
+router.post('/items', protect, upload.single('image'), controller.createItem);
 router.put('/items/:id', upload.single('image'), controller.updateItem);
 router.delete('/items/:id', controller.deleteItem);
 router.patch('/items/:id/status', controller.updateItemStatus);

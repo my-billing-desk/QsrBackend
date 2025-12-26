@@ -63,7 +63,10 @@ exports.signup = async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                role: user.role
+                username: user.username,
+                name: user.displayName,
+                role: user.role,
+                tenantId: user.tenantId
             }
         });
 
