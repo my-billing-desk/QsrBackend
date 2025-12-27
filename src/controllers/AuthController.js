@@ -1,4 +1,4 @@
-const { User } = require('../models');
+const { User, Tenant } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -15,7 +15,8 @@ exports.login = async (req, res) => {
                     { username: username },
                     { email: username }
                 ]
-            }
+            },
+            include: [{ model: Tenant }]
         });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -28,7 +29,17 @@ exports.login = async (req, res) => {
             { expiresIn: '24h' }
         );
 
-        res.json({ token, user: { id: user.id, username: user.username, role: user.role, name: user.displayName, tenantId: user.tenantId } });
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                name: user.displayName,
+                tenantId: user.tenantId,
+                tenantName: user.Tenant?.name
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

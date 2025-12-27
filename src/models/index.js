@@ -13,6 +13,11 @@ const SpecialNote = require('./SpecialNote');
 const Discount = require('./Discount');
 const Setting = require('./Setting');
 const Tenant = require('./Tenant');
+
+// Add User <-> Tenant Relationship
+User.belongsTo(Tenant, { foreignKey: 'tenantId' });
+Tenant.hasMany(User, { foreignKey: 'tenantId' });
+
 const AddonGroup = require('./AddonGroup');
 const VariationGroup = require('./VariationGroup');
 const ItemAddonGroup = require('./ItemAddonGroup');

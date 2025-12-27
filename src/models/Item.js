@@ -19,6 +19,18 @@ const Item = sequelize.define('Item', {
         type: DataTypes.FLOAT,
         allowNull: false
     },
+    areaPrices: {
+        type: DataTypes.JSON,
+        allowNull: true
+    },
+    lastPublishedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    scheduledPublishTime: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
     // addonGroupId removed as we use Many-to-Many relationship
     categoryId: {
         type: DataTypes.INTEGER,
