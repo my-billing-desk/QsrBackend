@@ -15,6 +15,11 @@ const ItemVariationGroup = sequelize.define('ItemVariationGroup', {
         type: DataTypes.INTEGER,
         allowNull: false
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = ItemVariationGroup;

@@ -19,6 +19,11 @@ const Tax = sequelize.define('Tax', {
         type: DataTypes.BOOLEAN,
         defaultValue: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = Tax;

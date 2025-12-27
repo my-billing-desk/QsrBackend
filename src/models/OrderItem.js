@@ -43,6 +43,11 @@ const OrderItem = sequelize.define('OrderItem', {
         type: DataTypes.STRING,
         allowNull: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = OrderItem;

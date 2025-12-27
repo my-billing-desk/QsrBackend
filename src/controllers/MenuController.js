@@ -16,7 +16,7 @@ exports.getCategories = async (req, res) => {
 
 exports.createCategory = async (req, res) => {
     try {
-        const category = await Category.create(req.body);
+        const category = await Category.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(category);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -25,7 +25,7 @@ exports.createCategory = async (req, res) => {
 
 exports.deleteCategory = async (req, res) => {
     try {
-        await Category.destroy({ where: { id: req.params.id } });
+        await Category.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Category deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -50,7 +50,7 @@ exports.reorderMenuItems = async (req, res) => {
 
         for (const update of updates) {
             await Model.update({ sortOrder: update.sortOrder }, {
-                where: { id: update.id },
+                where: { id: update.id, tenantId: req.tenantId }, // Scoped to tenant
                 transaction: t
             });
         }
@@ -124,6 +124,9 @@ exports.createItem = async (req, res) => {
         if (itemData.showImage === 'true') itemData.showImage = true;
         if (itemData.showImage === 'false') itemData.showImage = false;
 
+        // Force Tenant ID
+        itemData.tenantId = req.tenantId;
+
         // Create Item
         const item = await Item.create(itemData, { transaction: t });
 
@@ -131,7 +134,8 @@ exports.createItem = async (req, res) => {
         if (variants && Array.isArray(variants) && variants.length > 0) {
             const variantPromises = variants.map(v => Variant.create({
                 ...v,
-                itemId: item.id
+                itemId: item.id,
+                tenantId: req.tenantId
             }, { transaction: t }));
             await Promise.all(variantPromises);
         }
@@ -149,7 +153,8 @@ exports.createItem = async (req, res) => {
         await t.commit();
 
         // Fetch complete item
-        const completeItem = await Item.findByPk(item.id, {
+        const completeItem = await Item.findOne({
+            where: { id: item.id, tenantId: req.tenantId },
             include: [
                 Variant,
                 { model: AddonGroup, as: 'addonGroups' },
@@ -183,7 +188,7 @@ exports.updateItem = async (req, res) => {
         if (itemData.showImage === 'true') itemData.showImage = true;
         if (itemData.showImage === 'false') itemData.showImage = false;
 
-        const item = await Item.findByPk(id);
+        const item = await Item.findOne({ where: { id, tenantId: req.tenantId } });
         if (!item) {
             await t.rollback();
             return res.status(404).json({ error: 'Item not found' });
@@ -194,17 +199,18 @@ exports.updateItem = async (req, res) => {
 
         // Handle Variants: Replace strategy
         if (variants) {
-            await Variant.destroy({ where: { itemId: id }, transaction: t });
+            await Variant.destroy({ where: { itemId: id, tenantId: req.tenantId }, transaction: t });
             if (Array.isArray(variants) && variants.length > 0) {
                 const variantPromises = variants.map(v => Variant.create({
                     ...v,
-                    itemId: id
+                    itemId: id,
+                    tenantId: req.tenantId
                 }, { transaction: t }));
                 await Promise.all(variantPromises);
             }
         }
 
-        // Handle AddonGroups
+        // Handle AddonGroups (ManyToMany - usually safe but good to check ownership of groups if strict)
         if (addonGroupIds) {
             await item.setAddonGroups(addonGroupIds, { transaction: t });
         }
@@ -216,7 +222,8 @@ exports.updateItem = async (req, res) => {
 
         await t.commit();
 
-        const updatedItem = await Item.findByPk(id, {
+        const updatedItem = await Item.findOne({
+            where: { id, tenantId: req.tenantId },
             include: [
                 Variant,
                 { model: AddonGroup, as: 'addonGroups' },
@@ -232,7 +239,7 @@ exports.updateItem = async (req, res) => {
 
 exports.deleteItem = async (req, res) => {
     try {
-        await Item.destroy({ where: { id: req.params.id } });
+        await Item.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Item deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -243,7 +250,7 @@ exports.updateItemStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body; // e.g. { availableOffline: false }
-        const item = await Item.findByPk(id);
+        const item = await Item.findOne({ where: { id, tenantId: req.tenantId } });
         if (!item) return res.status(404).json({ error: 'Item not found' });
 
         await item.update(updates);
@@ -699,7 +706,10 @@ exports.exportFullMenu = async (req, res) => {
 // Variants
 exports.getVariants = async (req, res) => {
     try {
-        const variants = await Variant.findAll({ include: Item });
+        const variants = await Variant.findAll({
+            where: { tenantId: req.tenantId },
+            include: Item
+        });
         res.json(variants);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -708,7 +718,7 @@ exports.getVariants = async (req, res) => {
 
 exports.createVariant = async (req, res) => {
     try {
-        const variant = await Variant.create(req.body);
+        const variant = await Variant.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(variant);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -717,7 +727,7 @@ exports.createVariant = async (req, res) => {
 
 exports.deleteVariant = async (req, res) => {
     try {
-        await Variant.destroy({ where: { id: req.params.id } });
+        await Variant.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Variant deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -727,7 +737,7 @@ exports.deleteVariant = async (req, res) => {
 // Addons
 exports.getAddons = async (req, res) => {
     try {
-        const addons = await Addon.findAll();
+        const addons = await Addon.findAll({ where: { tenantId: req.tenantId } });
         res.json(addons);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -736,7 +746,7 @@ exports.getAddons = async (req, res) => {
 
 exports.createAddon = async (req, res) => {
     try {
-        const addon = await Addon.create(req.body);
+        const addon = await Addon.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(addon);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -745,7 +755,7 @@ exports.createAddon = async (req, res) => {
 
 exports.deleteAddon = async (req, res) => {
     try {
-        await Addon.destroy({ where: { id: req.params.id } });
+        await Addon.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Addon deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });

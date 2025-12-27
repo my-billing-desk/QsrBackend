@@ -29,6 +29,11 @@ const Aggregator = sequelize.define('Aggregator', {
         type: DataTypes.STRING, // e.g., URL or identifier
         allowNull: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = Aggregator;

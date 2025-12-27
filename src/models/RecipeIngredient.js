@@ -27,6 +27,11 @@ const RecipeIngredient = sequelize.define('RecipeIngredient', {
         type: DataTypes.FLOAT,
         defaultValue: 0
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = RecipeIngredient;

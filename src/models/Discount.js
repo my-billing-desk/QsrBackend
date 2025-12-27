@@ -23,6 +23,11 @@ const Discount = sequelize.define('Discount', {
         type: DataTypes.STRING,
         allowNull: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = Discount;

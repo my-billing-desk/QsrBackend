@@ -35,6 +35,11 @@ const PurchaseReturnItem = sequelize.define('PurchaseReturnItem', {
         type: DataTypes.FLOAT,
         defaultValue: 0
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = PurchaseReturnItem;

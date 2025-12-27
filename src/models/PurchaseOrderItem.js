@@ -31,6 +31,11 @@ const PurchaseOrderItem = sequelize.define('PurchaseOrderItem', {
         type: DataTypes.FLOAT,
         defaultValue: 0
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = PurchaseOrderItem;

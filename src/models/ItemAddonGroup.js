@@ -15,6 +15,11 @@ const ItemAddonGroup = sequelize.define('ItemAddonGroup', {
         type: DataTypes.INTEGER,
         allowNull: false
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = ItemAddonGroup;

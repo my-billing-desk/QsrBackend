@@ -28,6 +28,11 @@ const Addon = sequelize.define('Addon', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = Addon;

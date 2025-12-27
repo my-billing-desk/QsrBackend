@@ -48,6 +48,11 @@ const Variant = sequelize.define('Variant', {
         type: DataTypes.BOOLEAN,
         defaultValue: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = Variant;

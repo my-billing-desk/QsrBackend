@@ -19,6 +19,11 @@ const SpecialNote = sequelize.define('SpecialNote', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = SpecialNote;

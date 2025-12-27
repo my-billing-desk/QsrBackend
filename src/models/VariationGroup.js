@@ -26,6 +26,10 @@ const VariationGroup = sequelize.define('VariationGroup', {
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true
+    },
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
 });
 

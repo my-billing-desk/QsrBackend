@@ -7,13 +7,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 exports.login = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        let { username, password, email } = req.body;
+        const identifier = username || email;
+
+        if (!identifier || !password) {
+            return res.status(400).json({ error: 'Username/Email and Password are required' });
+        }
+
         // Allow login by Username OR Email
         const user = await User.findOne({
             where: {
                 [Op.or]: [
-                    { username: username },
-                    { email: username }
+                    { username: identifier },
+                    { email: identifier }
                 ]
             },
             include: [{ model: Tenant }]

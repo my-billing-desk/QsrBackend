@@ -39,6 +39,11 @@ const WastageItem = sequelize.define('WastageItem', {
         type: DataTypes.STRING,
         allowNull: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = WastageItem;

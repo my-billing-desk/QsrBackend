@@ -22,6 +22,10 @@ const AddonGroup = sequelize.define('AddonGroup', {
     maxSelection: {
         type: DataTypes.INTEGER,
         defaultValue: 1 // 1 for radio, >1 for checkbox
+    },
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
 });
 

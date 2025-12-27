@@ -35,6 +35,11 @@ const PurchaseReturn = sequelize.define('PurchaseReturn', {
         type: DataTypes.STRING,
         allowNull: true
     }
+,
+    tenantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    }
 });
 
 module.exports = PurchaseReturn;
