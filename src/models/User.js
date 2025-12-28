@@ -11,7 +11,7 @@ const User = sequelize.define('User', {
     username: {
         type: DataTypes.STRING,
         allowNull: true, // Optional for Google Users
-        unique: true
+        unique: 'user_tenant_unique' // Scoped to tenant
     },
     email: {
         type: DataTypes.STRING,
@@ -41,7 +41,8 @@ const User = sequelize.define('User', {
     },
     tenantId: {
         type: DataTypes.UUID,
-        allowNull: true
+        allowNull: true,
+        unique: 'user_tenant_unique'
     }
 });
 

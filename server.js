@@ -112,7 +112,7 @@ app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.sta
 
 // Sync Database
 let dbReady = false;
-sequelize.sync().then(() => {
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced');
     dbReady = true;
     if (require.main === module) {
