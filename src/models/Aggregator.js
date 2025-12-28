@@ -28,10 +28,25 @@ const Aggregator = sequelize.define('Aggregator', {
     icon: {
         type: DataTypes.STRING, // e.g., URL or identifier
         allowNull: true
-    }
-,
+    },
+    autoAccept: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    autoMarkReadyTime: {
+        type: DataTypes.INTEGER, // in minutes, 0 means disabled
+        defaultValue: 0
+    },
+    verificationStatus: {
+        type: DataTypes.ENUM('pending', 'verified', 'failed', 'none'),
+        defaultValue: 'none'
+    },
+    merchantId: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });

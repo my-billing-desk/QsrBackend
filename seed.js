@@ -1,7 +1,7 @@
 const {
     sequelize, User, Category, Item, Variant, VariationGroup,
     RawMaterial, Supplier, Purchase, PurchaseItem,
-    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup
+    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup, Aggregator
 } = require('./src/models');
 const bcrypt = require('bcryptjs');
 
@@ -26,6 +26,7 @@ async function seed() {
         await User.create({
             username: 'guna',
             password: 'king123',
+            passcode: '1111',
             role: 'super_admin',
             displayName: 'Super Admin',
             email: 'guna.swtkiller@gmail.com',
@@ -36,6 +37,7 @@ async function seed() {
         await User.create({
             username: 'admin',
             password: 'admin123',
+            passcode: '1234',
             role: 'admin',
             displayName: 'Store Manager',
             email: 'manager@sunburst.com',
@@ -46,6 +48,7 @@ async function seed() {
         await User.create({
             username: 'cashier',
             password: '123',
+            passcode: '2024',
             role: 'cashier',
             displayName: 'Cashier 1',
             email: 'cashier@sunburst.com',
@@ -56,6 +59,7 @@ async function seed() {
         await User.create({
             username: 'kitchen',
             password: '123',
+            passcode: '3030',
             role: 'kitchen',
             displayName: 'Head Chef',
             email: 'chef@sunburst.com',
@@ -233,6 +237,57 @@ async function seed() {
             include: [{ model: OrderItem, as: 'items' }]
         });
 
+
+        // 10. Aggregators
+        console.log('Seeding Aggregators...');
+        await Aggregator.create({
+            name: 'Zomato',
+            slug: 'zomato',
+            isConnected: true,
+            icon: 'https://upload.wikimedia.org/wikipedia/commons/b/bd/Zomato_Logo.png',
+            tenantId
+        });
+        await Aggregator.create({
+            name: 'Swiggy',
+            slug: 'swiggy',
+            isConnected: true,
+            icon: 'https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png',
+            tenantId
+        });
+
+        // 11. Online Orders (Sample)
+        console.log('Seeding Online Orders...');
+        await Order.create({
+            orderNumber: 'ZOM-8821',
+            customerName: 'Alice Smith',
+            customerPhone: '9898989898',
+            type: 'delivery',
+            source: 'Zomato',
+            status: 'placed',
+            paymentStatus: 'paid',
+            totalAmount: 315,
+            tenantId,
+            items: [
+                { itemId: pizza.id, itemName: 'Margherita Pizza (Regular)', quantity: 1, price: 250, total: 250, tenantId },
+                { itemId: burger.id, itemName: 'Classic Burger', quantity: 1, price: 50, total: 50, tenantId }
+            ]
+        }, { include: [{ model: OrderItem, as: 'items' }] });
+
+        await Order.create({
+            orderNumber: 'SWI-9912',
+            customerName: 'Bob Vance',
+            customerPhone: '9797979797',
+            type: 'delivery',
+            source: 'Swiggy',
+            status: 'preparing',
+            paymentStatus: 'paid',
+            totalAmount: 190,
+            tenantId,
+            items: [
+                { itemId: burger.id, itemName: 'Classic Chicken Burger', quantity: 1, price: 150, total: 150, tenantId },
+                { itemId: 3, itemName: 'Coca Cola', quantity: 1, price: 40, total: 40, tenantId }
+            ]
+        }, { include: [{ model: OrderItem, as: 'items' }] });
 
         console.log('--- Seed Completed Successfully ---');
         process.exit(0);

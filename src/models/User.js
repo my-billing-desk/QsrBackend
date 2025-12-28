@@ -39,6 +39,11 @@ const User = sequelize.define('User', {
         type: DataTypes.JSON, // Stores permissions as a JSON object
         allowNull: true
     },
+    passcode: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: 'user_tenant_unique'
+    },
     tenantId: {
         type: DataTypes.UUID,
         allowNull: true,
@@ -46,10 +51,22 @@ const User = sequelize.define('User', {
     }
 });
 
-// Hash password before saving
+// Hash password and passcode before saving
 User.beforeCreate(async (user) => {
     if (user.password) {
         user.password = await bcrypt.hash(user.password, 10);
+    }
+    if (user.passcode) {
+        user.passcode = await bcrypt.hash(user.passcode, 10);
+    }
+});
+
+User.beforeUpdate(async (user) => {
+    if (user.changed('password')) {
+        user.password = await bcrypt.hash(user.password, 10);
+    }
+    if (user.changed('passcode')) {
+        user.passcode = await bcrypt.hash(user.passcode, 10);
     }
 });
 

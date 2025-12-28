@@ -7,6 +7,8 @@ const { protect } = require('../middleware/authMiddleware');
 router.post('/login', controller.login);
 router.post('/register', protect, controller.register);
 router.get('/users', protect, controller.getUsers);
+router.get('/sync-users', protect, controller.syncUsers);
+router.get('/init-terminal/:idOrSubdomain', controller.initTerminal);
 
 // Google Auth
 router.get('/google', controller.googleLogin);

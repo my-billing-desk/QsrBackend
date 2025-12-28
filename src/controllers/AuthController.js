@@ -1,4 +1,4 @@
-const { User, Tenant } = require('../models');
+const { User, Tenant, Category, Item } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,14 +7,59 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 exports.login = async (req, res) => {
     try {
-        let { username, password, email, tenantId, subdomain } = req.body;
-        const identifier = username || email;
+        console.log('[LOGIN_DEBUG] Body:', JSON.stringify(req.body));
+        let { username, password, email, tenantId, subdomain, passcode } = req.body;
 
-        if (!identifier || !password) {
-            return res.status(400).json({ error: 'Username/Email and Password are required' });
+        // Auto-resolve tenantId if subdomain is used as tenantId (common in POS)
+        let resolvedTenantId = tenantId;
+        if (tenantId && !tenantId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+            const foundTenant = await Tenant.findOne({ where: { subdomain: tenantId } });
+            if (foundTenant) {
+                console.log(`[LOGIN_DEBUG] Resolved subdomain "${tenantId}" to UUID "${foundTenant.id}"`);
+                resolvedTenantId = foundTenant.id;
+            }
         }
 
-        // Build query
+        // Handle Passcode Login (mainly for POS)
+        if (passcode) {
+            console.log('[LOGIN_DEBUG] Attempting passcode login for resolved tenant:', resolvedTenantId);
+            if (!resolvedTenantId) {
+                return res.status(400).json({ error: 'Restaurant ID/Subdomain is required' });
+            }
+
+            const users = await User.findAll({
+                where: { tenantId: resolvedTenantId },
+                include: [{ model: Tenant }]
+            });
+
+            let validUser = null;
+            for (const u of users) {
+                if (u.passcode && await bcrypt.compare(passcode.toString(), u.passcode)) {
+                    validUser = u;
+                    break;
+                }
+            }
+
+            if (!validUser) {
+                return res.status(401).json({ error: 'Invalid passcode for this restaurant' });
+            }
+
+            return sendLoginResponse(validUser, res);
+        }
+
+        // Handle Standard Login
+        const identifier = username || email;
+        const missing = [];
+        if (!identifier) missing.push('username/email');
+        if (!password) missing.push('password');
+
+        if (missing.length > 0) {
+            return res.status(400).json({
+                error: `[VER_2] ${missing.join(' and ')} required`,
+                received: req.body
+            });
+        }
+
         const query = {
             [Op.or]: [
                 { username: identifier },
@@ -22,10 +67,7 @@ exports.login = async (req, res) => {
             ]
         };
 
-        // If specific tenant requested (e.g. from POS config)
-        if (tenantId) {
-            query.tenantId = tenantId;
-        }
+        if (resolvedTenantId) query.tenantId = resolvedTenantId;
 
         let possibleUsers = await User.findAll({
             where: query,
@@ -36,14 +78,10 @@ exports.login = async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // If subdomain is provided, filter by it
-        // (Assuming the frontend sends subdomain if running on one, or user entered store code)
         if (subdomain) {
             possibleUsers = possibleUsers.filter(u => u.Tenant && u.Tenant.subdomain === subdomain);
         }
 
-        // If multiple users found, try to verify password for all to see if only one matches
-        // (This handles case where same username has different passwords across tenants)
         let validUsers = [];
         for (const u of possibleUsers) {
             if (await bcrypt.compare(password, u.password)) {
@@ -56,42 +94,43 @@ exports.login = async (req, res) => {
         }
 
         if (validUsers.length > 1) {
-            // Ambiguous! We strictly require a tenant identifier now.
-            // Do NOT reveal the accounts.
             return res.status(401).json({
                 error: 'Ambiguous account. Please provide valid Store Code.',
                 requireStoreCode: true
             });
         }
 
-        const user = validUsers[0];
-
-        // CHECK TENANT STATUS
-        if (user.Tenant && user.Tenant.status !== 'active') {
-            return res.status(403).json({ error: 'Restaurant account is inactive' });
-        }
-
-        const token = jwt.sign(
-            { id: user.id, role: user.role, name: user.displayName, tenantId: user.tenantId },
-            JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        res.json({
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                name: user.displayName,
-                tenantId: user.tenantId,
-                tenantName: user.Tenant?.name
-            }
-        });
+        return sendLoginResponse(validUsers[0], res);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
+
+// Helper to generate token and response
+function sendLoginResponse(user, res) {
+    if (user.Tenant && user.Tenant.status !== 'active') {
+        return res.status(403).json({ error: 'Restaurant account is inactive' });
+    }
+
+    const token = jwt.sign(
+        { id: user.id, role: user.role, name: user.displayName, tenantId: user.tenantId },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+    );
+
+    return res.json({
+        token,
+        user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            name: user.displayName,
+            tenantId: user.tenantId,
+            tenantName: user.Tenant?.name
+        }
+    });
+}
+
 
 exports.register = async (req, res) => {
     try {
@@ -119,9 +158,71 @@ exports.getUsers = async (req, res) => {
     try {
         const users = await User.findAll({
             where: { tenantId: req.user.tenantId },
-            attributes: { exclude: ['password'] }
+            attributes: { exclude: ['password', 'passcode'] }
         });
         res.json(users);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.syncUsers = async (req, res) => {
+    try {
+        if (!req.user.tenantId) {
+            return res.status(400).json({ error: 'Tenant ID required for sync' });
+        }
+        const users = await User.findAll({
+            where: { tenantId: req.user.tenantId },
+            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId']
+        });
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.initTerminal = async (req, res) => {
+    try {
+        const { idOrSubdomain } = req.params;
+        console.log(`[INIT_DEBUG] Terminal init request for: "${idOrSubdomain}"`);
+
+        // Find Tenant
+        const tenant = await Tenant.findOne({
+            where: {
+                [Op.or]: [
+                    { id: idOrSubdomain },
+                    { subdomain: idOrSubdomain }
+                ]
+            }
+        });
+
+        if (!tenant) {
+            console.log(`[INIT_DEBUG] Tenant not found for: "${idOrSubdomain}"`);
+            return res.status(404).json({ error: 'Restaurant not found. Please verify the ID or Subdomain.' });
+        }
+
+        // Fetch Users (with hashes for offline login)
+        const users = await User.findAll({
+            where: { tenantId: tenant.id },
+            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId']
+        });
+
+        // Fetch Menu
+        const categories = await Category.findAll({ where: { tenantId: tenant.id } });
+        const items = await Item.findAll({ where: { tenantId: tenant.id } });
+
+        res.json({
+            tenant: {
+                id: tenant.id,
+                name: tenant.name,
+                subdomain: tenant.subdomain
+            },
+            users,
+            menu: {
+                categories,
+                items
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

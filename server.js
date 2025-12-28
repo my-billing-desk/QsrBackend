@@ -6,6 +6,10 @@ const { sequelize } = require('./src/models'); // Using the models index for rel
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Body Parsers (MUST BE BEFORE LOGGER to log body)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Routes Import
 const menuRoutes = require('./src/routes/menuRoutes');
 const orderRoutes = require('./src/routes/orderRoutes');
@@ -33,6 +37,9 @@ app.options('*', cors());
 // Debug Logger
 app.use((req, res, next) => {
     console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, Path: ${req.path}`);
+    if (Object.keys(req.body).length > 0) {
+        console.log(`[DEBUG] Body: ${JSON.stringify(req.body)}`);
+    }
     next();
 });
 
@@ -46,7 +53,6 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
 const passport = require('./src/config/passport');
@@ -112,7 +118,7 @@ app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.sta
 
 // Sync Database
 let dbReady = false;
-sequelize.sync({ alter: true }).then(() => {
+sequelize.sync().then(() => {
     console.log('Database synced');
     dbReady = true;
     if (require.main === module) {
