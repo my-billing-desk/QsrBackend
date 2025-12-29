@@ -137,6 +137,11 @@ const Item = sequelize.define('Item', {
         type: DataTypes.BOOLEAN,
         defaultValue: true
     },
+    autoSelectVariation: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        comment: 'If true, auto-select first variation and show price. If false, require manual selection in modal.'
+    },
     tenantId: {
         type: DataTypes.UUID,
         allowNull: true

@@ -126,10 +126,23 @@ exports.createOrder = async (req, res) => {
 
             await OrderItem.bulkCreate(orderItems);
 
-            // Trigger Stock Consumption
-            // We pass the original 'items' from request as they contain itemId/variantId
-            // The orderItems constructed above might lose some props if not careful, but 'items' has everything needed.
-            await consumeStock(items);
+            // NEW: Use improved inventory deduction service
+            try {
+                const inventoryDeductionService = require('../services/inventoryDeductionService');
+                const deductionResult = await inventoryDeductionService.deductInventoryForOrder({
+                    id: order.id,
+                    items: items
+                }, req.user?.id);
+
+                // Log warnings if any
+                if (deductionResult.warnings && deductionResult.warnings.length > 0) {
+                    console.warn('Low stock warnings:', deductionResult.warnings);
+                    // Could emit WebSocket event here for real-time alerts
+                }
+            } catch (stockError) {
+                console.error('Inventory deduction failed:', stockError);
+                // Don't block order creation, but log the error
+            }
 
             // Update total amount only if not provided by client (to preserve tax/packing logic from POS)
             if (activeTotal === undefined || activeTotal === null) {

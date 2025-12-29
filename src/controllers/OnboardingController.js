@@ -43,6 +43,7 @@ exports.signup = async (req, res) => {
             email,
             password,
             displayName: name || businessName,
+            phone: phone || null,
             role: 'super_admin',
             tenantId: tenant.id
         }, { transaction: t });

@@ -83,6 +83,11 @@ const Order = sequelize.define('Order', {
     tenantId: {
         type: DataTypes.UUID,
         allowNull: true
+    },
+    outletId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Reference to specific restaurant branch'
     }
 });
 

@@ -33,6 +33,10 @@ const PurchaseOrderItem = require('./PurchaseOrderItem');
 const PurchaseReturn = require('./PurchaseReturn');
 const PurchaseReturnItem = require('./PurchaseReturnItem');
 const Outlet = require('./Outlet');
+const POSDevice = require('./POSDevice');
+const CashMovement = require('./CashMovement');
+const StockTransaction = require('./StockTransaction');
+const Customer = require('./Customer');
 
 // Relationships
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -105,6 +109,40 @@ PurchaseReturnItem.belongsTo(PurchaseReturn, { foreignKey: 'purchaseReturnId' })
 RawMaterial.hasMany(PurchaseReturnItem, { foreignKey: 'rawMaterialId' });
 PurchaseReturnItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
 
+// POS Device Relationships
+Tenant.hasMany(POSDevice, { foreignKey: 'tenantId' });
+POSDevice.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Outlet.hasMany(POSDevice, { foreignKey: 'outletId' });
+POSDevice.belongsTo(Outlet, { foreignKey: 'outletId' });
+
+// Cash Movement Relationships
+Tenant.hasMany(CashMovement, { foreignKey: 'tenantId' });
+CashMovement.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+User.hasMany(CashMovement, { foreignKey: 'performedBy', as: 'performedMovements' });
+CashMovement.belongsTo(User, { foreignKey: 'performedBy', as: 'performer' });
+
+User.hasMany(CashMovement, { foreignKey: 'approvedBy', as: 'approvedMovements' });
+CashMovement.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
+
+// Stock Transaction Relationships
+RawMaterial.hasMany(StockTransaction, { foreignKey: 'rawMaterialId' });
+StockTransaction.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
+
+Order.hasMany(StockTransaction, { foreignKey: 'orderId' });
+StockTransaction.belongsTo(Order, { foreignKey: 'orderId' });
+
+User.hasMany(StockTransaction, { foreignKey: 'performedBy', as: 'stockTransactions' });
+StockTransaction.belongsTo(User, { foreignKey: 'performedBy', as: 'performer' });
+
+// Customer Relationships
+Tenant.hasMany(Customer, { foreignKey: 'tenantId' });
+Customer.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Order.belongsTo(Customer, { foreignKey: 'customerId' });
+Customer.hasMany(Order, { foreignKey: 'customerId' });
+
 module.exports = {
     sequelize,
     Category,
@@ -135,5 +173,9 @@ module.exports = {
     PurchaseReturnItem,
     Outlet,
     Aggregator,
-    SpecialNote
+    SpecialNote,
+    POSDevice,
+    CashMovement,
+    StockTransaction,
+    Customer
 };

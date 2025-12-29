@@ -23,6 +23,16 @@ const AddonGroup = sequelize.define('AddonGroup', {
         type: DataTypes.INTEGER,
         defaultValue: 1 // 1 for radio, >1 for checkbox
     },
+    isRequired: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'If true, customer must select at least minSelection addons from this group'
+    },
+    displayLabel: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Label to show like "REQUIRED" or "OPTIONAL"'
+    },
     tenantId: {
         type: DataTypes.INTEGER,
         allowNull: true

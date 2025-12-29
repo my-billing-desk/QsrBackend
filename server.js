@@ -23,6 +23,9 @@ const aggregatorRoutes = require('./src/routes/aggregatorRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
 const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
 const onboardingRoutes = require('./src/routes/onboardingRoutes');
+const posDeviceRoutes = require('./src/routes/posDeviceRoutes');
+const cashMovementRoutes = require('./src/routes/cashMovementRoutes');
+const customerRoutes = require('./src/routes/customerRoutes');
 
 // Middleware
 // Explicit manual CORS
@@ -78,6 +81,9 @@ mount('/aggregators', aggregatorRoutes);
 mount('/reports', reportRoutes);
 mount('/special-notes', specialNoteRoutes);
 mount('/onboarding', onboardingRoutes);
+mount('/pos-devices', posDeviceRoutes);
+mount('/cash-movements', cashMovementRoutes);
+mount('/customers', customerRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running (Root)' });
@@ -118,7 +124,7 @@ app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.sta
 
 // Sync Database
 let dbReady = false;
-sequelize.sync().then(() => {
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced');
     dbReady = true;
     if (require.main === module) {
