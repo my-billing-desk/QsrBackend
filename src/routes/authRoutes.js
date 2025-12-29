@@ -9,6 +9,7 @@ router.post('/register', protect, controller.register);
 router.get('/users', protect, controller.getUsers);
 router.get('/sync-users', protect, controller.syncUsers);
 router.get('/init-terminal/:idOrSubdomain', controller.initTerminal);
+router.get('/me', protect, controller.getProfile);
 
 // Google Auth
 router.get('/google', controller.googleLogin);

@@ -32,6 +32,9 @@ const dialect = process.env.DB_DIALECT || 'sqlite';
 
 let sequelize;
 
+console.log('[DB Config] Storage Path:', storagePath);
+console.log('[DB Config] Dialect:', dialect);
+
 if (dialect === 'postgres') {
     sequelize = new Sequelize(
         process.env.DB_NAME || 'qsr_db',

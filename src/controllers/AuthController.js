@@ -1,4 +1,4 @@
-const { User, Tenant, Category, Item } = require('../models');
+const { User, Tenant, Category, Item, Variant, AddonGroup, VariationGroup, Addon, Setting, POSDevice } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -108,6 +108,7 @@ exports.login = async (req, res) => {
 
 // Helper to generate token and response
 function sendLoginResponse(user, res) {
+    console.log(`[AUTH DEBUG]PID:${process.pid} User: ${user.username}, ID: ${user.id}, TenantID: ${user.tenantId} (Type: ${typeof user.tenantId})`);
     if (user.Tenant && user.Tenant.status !== 'active') {
         return res.status(403).json({ error: 'Restaurant account is inactive' });
     }
@@ -209,7 +210,20 @@ exports.initTerminal = async (req, res) => {
 
         // Fetch Menu
         const categories = await Category.findAll({ where: { tenantId: tenant.id } });
-        const items = await Item.findAll({ where: { tenantId: tenant.id } });
+        const items = await Item.findAll({
+            where: { tenantId: tenant.id },
+            include: [
+                { model: Variant },
+                { model: AddonGroup, as: 'addonGroups', include: [Addon] }, // Include Addons in AddonGroup
+                { model: VariationGroup, as: 'variationGroups', include: [Variant] } // Include Variants in VariationGroup
+            ]
+        });
+
+        // Fetch Settings
+        const settings = await Setting.findAll({ where: { tenantId: tenant.id } });
+        // Convert settings array to object
+        const settingsObj = {};
+        settings.forEach(s => settingsObj[s.key] = s.value);
 
         res.json({
             tenant: {
@@ -221,8 +235,25 @@ exports.initTerminal = async (req, res) => {
             menu: {
                 categories,
                 items
-            }
+            },
+            settings: settingsObj
         });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getProfile = async (req, res) => {
+    try {
+        const user = await User.findByPk(req.user.id, {
+            include: [{ model: Tenant }]
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        return sendLoginResponse(user, res);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -24,11 +24,6 @@ const Tenant = sequelize.define('Tenant', {
         type: DataTypes.ENUM('starter', 'pro', 'enterprise'),
         defaultValue: 'starter'
     }
-,
-    tenantId: {
-        type: DataTypes.INTEGER,
-        allowNull: true
-    }
 });
 
 module.exports = Tenant;
