@@ -56,6 +56,10 @@ const Order = sequelize.define('Order', {
         type: DataTypes.STRING, // e.g., 'UPI', 'Cash', 'Card'
         defaultValue: 'Cash'
     },
+    paymentDetails: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     discount: {
         type: DataTypes.FLOAT,
         defaultValue: 0.0

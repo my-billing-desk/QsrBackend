@@ -13,11 +13,40 @@ async function seed() {
 
         // 1. Tenant
         console.log('Seeding Tenant...');
+
+        // Tenant 1: Active Enterprise (Expiry in 365 days)
         const [tenant] = await Tenant.findOrCreate({
             where: { subdomain: 'sunburst' },
-            defaults: { name: 'Sunburst Stack', status: 'active', subscriptionPlan: 'enterprise' }
+            defaults: {
+                name: 'Sunburst Stack',
+                status: 'active',
+                subscriptionPlan: 'enterprise',
+                subscriptionExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 Year from now
+            }
         });
         const tenantId = tenant.id;
+
+        // Tenant 2: Trial User (Expiry in 7 days) - For testing
+        const [trialTenant] = await Tenant.findOrCreate({
+            where: { subdomain: 'trialshop' },
+            defaults: {
+                name: 'Trial Coffee Shop',
+                status: 'trial',
+                subscriptionPlan: 'starter',
+                subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            }
+        });
+
+        // Tenant 3: Expired Trial (Onboard Pending) - For testing
+        const [expiredTenant] = await Tenant.findOrCreate({
+            where: { subdomain: 'expiredshop' },
+            defaults: {
+                name: 'Expired Pizza Place',
+                status: 'onboard_pending',
+                subscriptionPlan: 'starter',
+                subscriptionExpiryDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // Expired yesterday
+            }
+        });
 
         // 2. Users (Super Admin, Manager, Cashier, Kitchen)
         console.log('Seeding Users...');
@@ -42,6 +71,28 @@ async function seed() {
             displayName: 'Store Manager',
             email: 'manager@sunburst.com',
             tenantId: tenantId
+        });
+
+        // Trial Tenant User
+        await User.create({
+            username: 'trialuser',
+            password: '123',
+            passcode: '0000',
+            role: 'super_admin',
+            displayName: 'Trial User',
+            email: 'trial@trialshop.com',
+            tenantId: trialTenant.id
+        });
+
+        // Expired Tenant User
+        await User.create({
+            username: 'expireduser',
+            password: '123',
+            passcode: '9999',
+            role: 'super_admin',
+            displayName: 'Expired User',
+            email: 'expired@expiredshop.com',
+            tenantId: expiredTenant.id
         });
 
         // Cashier

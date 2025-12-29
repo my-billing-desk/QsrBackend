@@ -33,8 +33,9 @@ exports.signup = async (req, res) => {
         const tenant = await Tenant.create({
             name: businessName,
             subdomain: subdomain.toLowerCase(),
-            status: 'active',
-            subscriptionPlan: 'starter'
+            status: 'trial',
+            subscriptionPlan: 'starter',
+            subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         }, { transaction: t });
 
         // 3. Create Super Admin User

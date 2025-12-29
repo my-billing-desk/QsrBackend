@@ -44,7 +44,7 @@ exports.login = async (req, res) => {
                 return res.status(401).json({ error: 'Invalid passcode for this restaurant' });
             }
 
-            return sendLoginResponse(validUser, res);
+            return await sendLoginResponse(validUser, res);
         }
 
         // Handle Standard Login
@@ -100,17 +100,62 @@ exports.login = async (req, res) => {
             });
         }
 
-        return sendLoginResponse(validUsers[0], res);
+        return await sendLoginResponse(validUsers[0], res);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
 // Helper to generate token and response
-function sendLoginResponse(user, res) {
+async function sendLoginResponse(user, res) {
     console.log(`[AUTH DEBUG]PID:${process.pid} User: ${user.username}, ID: ${user.id}, TenantID: ${user.tenantId} (Type: ${typeof user.tenantId})`);
-    if (user.Tenant && user.Tenant.status !== 'active') {
-        return res.status(403).json({ error: 'Restaurant account is inactive' });
+
+    let daysLeft = null;
+    const tenant = user.Tenant;
+
+    if (tenant) {
+        if (tenant.status === 'inactive' || tenant.status === 'suspended') {
+            return res.status(403).json({ error: 'Restaurant account is inactive' });
+        }
+
+        if (tenant.status === 'onboard_pending') {
+            return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
+        }
+
+        const now = new Date();
+        const expiryDate = tenant.subscriptionExpiryDate ? new Date(tenant.subscriptionExpiryDate) : null;
+
+        // Fallback for trials created before logic update (uses createdAt)
+        if (tenant.status === 'trial' && !expiryDate) {
+            const createdAt = new Date(tenant.createdAt);
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const daysPassed = (now - createdAt) / msPerDay;
+
+            if (daysPassed > 7) {
+                tenant.status = 'onboard_pending';
+                await tenant.save();
+                return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
+            }
+            daysLeft = Math.ceil(7 - daysPassed);
+        }
+        else if (expiryDate) {
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const timeLeft = expiryDate - now;
+
+            if (timeLeft < 0) {
+                if (tenant.status === 'trial') {
+                    tenant.status = 'onboard_pending';
+                    await tenant.save();
+                    return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
+                } else if (tenant.status === 'active') {
+                    // For active, we might not block immediately but warn, or block. 
+                    // User request didn't specify blocking for active, just showing days.
+                    daysLeft = 0;
+                }
+            } else {
+                daysLeft = Math.ceil(timeLeft / msPerDay);
+            }
+        }
     }
 
     const token = jwt.sign(
@@ -127,8 +172,10 @@ function sendLoginResponse(user, res) {
             role: user.role,
             name: user.displayName,
             tenantId: user.tenantId,
-            tenantName: user.Tenant?.name
-        }
+            tenantName: user.Tenant?.name,
+            tenantStatus: user.Tenant?.status // Send status to frontend to distinguish trial vs active
+        },
+        daysLeft // Renamed from trialDaysLeft to generic daysLeft, but we can fallback map it in frontend
     });
 }
 
@@ -253,7 +300,7 @@ exports.getProfile = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        return sendLoginResponse(user, res);
+        return await sendLoginResponse(user, res);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

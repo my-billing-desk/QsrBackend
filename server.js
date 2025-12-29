@@ -127,6 +127,51 @@ let dbReady = false;
 sequelize.sync({ force: false }).then(() => {
     console.log('Database synced');
     dbReady = true;
+
+    // Trial Cleanup Job
+    const cleanupTrials = async () => {
+        try {
+            const { Tenant } = require('./src/models');
+            const { Op } = require('sequelize');
+
+            const cleanupDate = new Date();
+            cleanupDate.setDate(cleanupDate.getDate() - 14); // 7 days trial + 7 days grace
+
+            const tenantsToDelete = await Tenant.findAll({
+                where: {
+                    [Op.or]: [
+                        {
+                            // Logic A: createdAt based (fallback/legacy)
+                            createdAt: { [Op.lt]: cleanupDate },
+                            subscriptionExpiryDate: null,
+                            status: { [Op.in]: ['trial', 'onboard_pending'] }
+                        },
+                        {
+                            // Logic B: subscriptionExpiryDate based
+                            subscriptionExpiryDate: { [Op.lt]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000) }, // Expired + 7 days grace
+                            status: { [Op.in]: ['trial', 'onboard_pending'] }
+                        }
+                    ]
+                }
+            });
+
+            if (tenantsToDelete.length > 0) {
+                console.log(`[CLEANUP] Found ${tenantsToDelete.length} expired tenants to delete.`);
+                for (const t of tenantsToDelete) {
+                    console.log(`[CLEANUP] Deleting tenant ${t.id} (${t.name})`);
+                    // Use force: true to ignore soft deletes if enabled, though not enabled by default
+                    await t.destroy({ force: true });
+                }
+            }
+        } catch (e) {
+            console.error('[CLEANUP] Error cleaning up expired trials:', e);
+        }
+    };
+
+    // Run cleanup on start and every 24h
+    cleanupTrials();
+    setInterval(cleanupTrials, 24 * 60 * 60 * 1000);
+
     if (require.main === module) {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);

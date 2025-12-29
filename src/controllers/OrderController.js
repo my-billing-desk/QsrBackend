@@ -113,6 +113,13 @@ exports.createOrder = async (req, res) => {
         let calculatedTotal = 0;
         const activeTotal = orderData.totalAmount;
 
+        // Handle Split Payment Storage
+        if (orderData.splits && Array.isArray(orderData.splits)) {
+            orderData.paymentDetails = JSON.stringify(orderData.splits);
+        } else if (typeof orderData.paymentDetails === 'object') {
+            orderData.paymentDetails = JSON.stringify(orderData.paymentDetails);
+        }
+
         // Create Order
         const order = await Order.create({ ...orderData, tenantId: req.tenantId });
 

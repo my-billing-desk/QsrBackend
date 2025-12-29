@@ -17,12 +17,16 @@ const Tenant = sequelize.define('Tenant', {
         allowNull: true
     },
     status: {
-        type: DataTypes.ENUM('active', 'inactive', 'suspended'),
+        type: DataTypes.ENUM('active', 'inactive', 'suspended', 'trial', 'onboard_pending'),
         defaultValue: 'active'
     },
     subscriptionPlan: {
         type: DataTypes.ENUM('starter', 'pro', 'enterprise'),
         defaultValue: 'starter'
+    },
+    subscriptionExpiryDate: {
+        type: DataTypes.DATE,
+        allowNull: true
     }
 });
 
