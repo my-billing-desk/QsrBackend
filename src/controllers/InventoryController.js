@@ -10,6 +10,7 @@ const { Op } = require('sequelize');
 
 exports.getRawMaterials = async (req, res) => {
     try {
+        if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
         const materials = await RawMaterial.findAll({
             where: { tenantId: req.tenantId },
             order: [['name', 'ASC']]
@@ -22,6 +23,7 @@ exports.getRawMaterials = async (req, res) => {
 
 exports.getRawMaterialById = async (req, res) => {
     try {
+        if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
         const { id } = req.params;
         const material = await RawMaterial.findOne({ where: { id, tenantId: req.tenantId } });
         if (!material) {
@@ -35,6 +37,7 @@ exports.getRawMaterialById = async (req, res) => {
 
 exports.createRawMaterial = async (req, res) => {
     try {
+        if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
         const material = await RawMaterial.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(material);
     } catch (error) {
@@ -44,6 +47,7 @@ exports.createRawMaterial = async (req, res) => {
 
 exports.updateRawMaterial = async (req, res) => {
     try {
+        if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
         const { id } = req.params;
         const [updated] = await RawMaterial.update(req.body, { where: { id, tenantId: req.tenantId } });
         if (updated) {
@@ -59,8 +63,10 @@ exports.updateRawMaterial = async (req, res) => {
 
 exports.deleteRawMaterial = async (req, res) => {
     try {
+        if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
         const { id } = req.params;
-        await RawMaterial.destroy({ where: { id, tenantId: req.tenantId } });
+        const deleted = await RawMaterial.destroy({ where: { id, tenantId: req.tenantId } });
+        if (!deleted) return res.status(404).json({ error: 'Raw Material not found' });
         res.json({ message: 'Raw Material deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -402,11 +408,40 @@ exports.getInventoryStats = async (req, res) => {
             totalValue += (m.currentStock * m.purchasePrice);
         });
 
+        // Wastage Calculation (Last 30 days)
+        const last30Days = new Date();
+        last30Days.setDate(last30Days.getDate() - 30);
+
+        const wastages = await Wastage.findAll({
+            where: {
+                tenantId: req.tenantId,
+                date: { [Op.gte]: last30Days }
+            },
+            include: [{ model: WastageItem, include: [RawMaterial] }]
+        });
+
+        // Calculate Wastage Value
+        let totalWastageValue = 0;
+        wastages.forEach(w => {
+            w.WastageItems.forEach(wi => {
+                // If item has recorded cost use it, else use current raw material price
+                const price = wi.price || wi.RawMaterial?.purchasePrice || 0;
+                totalWastageValue += (wi.quantity * price);
+            });
+        });
+
+        // Margin Mock/Approximation
+        // In a real scenario, call the COGS service.
+        // For now, return a placeholder or simplified calc if possible, else 0.
+        // Let's default to a safe value to avoid "0%" shock if no data.
+        const marginGap = 0;
+
         res.json({
             totalItems: materials.length,
             lowStockCount: lowStock,
             totalStockValue: totalValue,
-            totalWastage: 450 // Mock for now
+            totalWastage: totalWastageValue.toFixed(2),
+            marginGap
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

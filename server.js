@@ -41,7 +41,11 @@ app.options('*', cors());
 app.use((req, res, next) => {
     console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, Path: ${req.path}`);
     if (Object.keys(req.body).length > 0) {
-        console.log(`[DEBUG] Body: ${JSON.stringify(req.body)}`);
+        // Create a copy to sanitize
+        const bodyLog = { ...req.body };
+        if (bodyLog.password) bodyLog.password = '***';
+        if (bodyLog.passcode) bodyLog.passcode = '***';
+        console.log(`[DEBUG] Body: ${JSON.stringify(bodyLog)}`);
     }
     next();
 });
@@ -97,17 +101,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
-// Catch-all for debugging
-app.all('*', (req, res) => {
-    console.log(`[404] Route not found: ${req.url}`);
-    res.status(404).json({
-        error: 'Route not found',
-        url: req.url,
-        path: req.path,
-        method: req.method,
-        note: 'This is a custom 404 from Express'
-    });
-});
+
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -124,7 +118,7 @@ app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.sta
 
 // Sync Database
 let dbReady = false;
-sequelize.sync({ force: false }).then(() => {
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced');
     dbReady = true;
 
@@ -172,9 +166,22 @@ sequelize.sync({ force: false }).then(() => {
     cleanupTrials();
     setInterval(cleanupTrials, 24 * 60 * 60 * 1000);
 
+    // DB Readiness Middleware (optional, or just let it fail)
     if (require.main === module) {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
+        });
+
+        // Catch-all for debugging (MOVED TO END)
+        app.all('*', (req, res) => {
+            console.log(`[404] Route not found: ${req.url}`);
+            res.status(404).json({
+                error: 'Route not found',
+                url: req.url,
+                path: req.path,
+                method: req.method,
+                note: 'This is a custom 404 from Express'
+            });
         });
     }
 }).catch(err => {

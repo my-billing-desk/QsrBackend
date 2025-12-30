@@ -49,6 +49,11 @@ const Outlet = sequelize.define('Outlet', {
         defaultValue: 'Ruby Red',
         comment: 'Human readable name for the selected theme'
     },
+    themePalette: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'JSON string of color palette'
+    },
 
     tenantId: {
         type: DataTypes.UUID,

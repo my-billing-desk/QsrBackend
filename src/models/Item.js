@@ -135,7 +135,7 @@ const Item = sequelize.define('Item', {
     },
     showImage: {
         type: DataTypes.BOOLEAN,
-        defaultValue: true
+        defaultValue: false
     },
     autoSelectVariation: {
         type: DataTypes.BOOLEAN,

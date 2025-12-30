@@ -7,25 +7,25 @@ const { protect } = require('../middleware/authMiddleware');
 
 router.get('/categories', protect, controller.getCategories);
 router.post('/categories', protect, controller.createCategory);
-router.delete('/categories/:id', controller.deleteCategory);
+router.delete('/categories/:id', protect, controller.deleteCategory);
 
 router.get('/items', protect, controller.getItems);
 router.post('/items', protect, upload.single('image'), controller.createItem);
-router.put('/items/:id', upload.single('image'), controller.updateItem);
-router.delete('/items/:id', controller.deleteItem);
-router.patch('/items/:id/status', controller.updateItemStatus);
-router.post('/items/bulk-status', controller.updateBulkStatus);
+router.put('/items/:id', protect, upload.single('image'), controller.updateItem);
+router.delete('/items/:id', protect, controller.deleteItem);
+router.patch('/items/:id/status', protect, controller.updateItemStatus);
+router.post('/items/bulk-status', protect, controller.updateBulkStatus);
+router.post('/items/import-full', protect, controller.importFullMenu);
 router.post('/items/import-full', controller.importFullMenu);
-router.post('/items/import-full', controller.importFullMenu);
-router.get('/items/export', controller.exportFullMenu);
-router.post('/reorder', controller.reorderMenuItems);
+router.get('/items/export', protect, controller.exportFullMenu);
+router.post('/reorder', protect, controller.reorderMenuItems);
 
-router.get('/variants', controller.getVariants);
-router.post('/variants', controller.createVariant);
-router.delete('/variants/:id', controller.deleteVariant);
+router.get('/variants', protect, controller.getVariants);
+router.post('/variants', protect, controller.createVariant);
+router.delete('/variants/:id', protect, controller.deleteVariant);
 
-router.get('/addons', controller.getAddons);
-router.post('/addons', controller.createAddon);
-router.delete('/addons/:id', controller.deleteAddon);
+router.get('/addons', protect, controller.getAddons);
+router.post('/addons', protect, controller.createAddon);
+router.delete('/addons/:id', protect, controller.deleteAddon);
 
 module.exports = router;

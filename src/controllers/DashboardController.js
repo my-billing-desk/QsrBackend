@@ -1,6 +1,21 @@
 const { Order, OrderItem, Purchase, Aggregator, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
+// Helper function to calculate time since
+function timeSince(date) {
+    if (!date) return 'Never';
+    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
+
 exports.getStats = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
@@ -34,7 +49,41 @@ exports.getStats = async (req, res) => {
             order: [['createdAt', 'DESC']]
         });
 
-        // ... existing filter logic ...
+        // Filter orders by date range
+        const validOrders = rawOrders.filter(o => {
+            const orderDate = new Date(o.createdAt);
+            return orderDate >= queryStart && orderDate <= queryEnd && o.status !== 'cancelled';
+        });
+
+        // Calculate basic stats
+        const totalOrders = validOrders.length;
+        const totalIncome = validOrders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0);
+        const successful = validOrders.filter(o => o.status === 'completed' || o.status === 'paid').length;
+        const cancelled = rawOrders.filter(o => {
+            const orderDate = new Date(o.createdAt);
+            return orderDate >= queryStart && orderDate <= queryEnd && o.status === 'cancelled';
+        }).length;
+        const complimentary = validOrders.filter(o => o.status === 'complimentary').length;
+
+        // Unique customers
+        const uniquePhones = new Set();
+        validOrders.forEach(o => {
+            if (o.customerPhone) uniquePhones.add(o.customerPhone);
+        });
+        const uniqueConnects = uniquePhones.size;
+        const avgPerCustomer = uniqueConnects > 0 ? (totalIncome / uniqueConnects) : 0;
+
+        // Type breakdowns
+        const dineInOrders = validOrders.filter(o => o.type && o.type.toLowerCase().includes('dine'));
+        const takeAwayOrders = validOrders.filter(o => o.type && o.type.toLowerCase().includes('take'));
+        const deliveryOrders = validOrders.filter(o => o.type && o.type.toLowerCase().includes('delivery'));
+
+        const dineInTotal = dineInOrders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0);
+        const takeAwayTotal = takeAwayOrders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0);
+        const deliveryTotal = deliveryOrders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0);
+        const dineInCount = dineInOrders.length;
+        const takeAwayCount = takeAwayOrders.length;
+        const deliveryCount = deliveryOrders.length;
 
         // Online/Aggregator Orders
         const lastOnlineOrder = await Order.findOne({
@@ -96,9 +145,38 @@ exports.getStats = async (req, res) => {
             };
         });
 
-        // ... payment stats logic ...
+        // Customer Type Breakdown
+        // Simplistic: For the filtered set, how many are 1st order vs repeat?
+        // Better: For the period, how many distinct customers? 
+        // We already have uniqueConnects (unique phones).
+        // Total Orders = totalOrders.
+        // If 100 orders, 80 unique phones.
+        // It's hard to strict "New vs Returning" without checking history for EACH customer.
+        // Heuristic: users with multiple orders IN THIS PERIOD are returning? No.
 
-        // Expenses form Purchase (Inventory)
+        // Let's rely on "Customer" table if it exists? Or just aggregate Order history.
+        // For MVP Speed:
+        // Returning = totalOrders - uniqueConnects (Repeat visits in this period) + a factor?
+        // Let's look at `Order` table count per phone.
+        // Since we filtered `validOrders` by date, we might miss "New" status if their first order was last year.
+        // Assume: We can't easily distinguish global New/Returning without a heavy query.
+        // Return placeholder derived from current data for now to remove static hardcode.
+        // "Returning" ~ (Total - Unique). "First Time" ~ Unique.
+        const returningCount = Math.max(0, totalOrders - uniqueConnects);
+        const firstTimeCount = uniqueConnects;
+
+        // Payment stats by method
+        const paymentStats = validOrders.reduce((acc, o) => {
+            const method = o.paymentMethod || 'Cash';
+            if (!acc[method]) {
+                acc[method] = { count: 0, total: 0 };
+            }
+            acc[method].count++;
+            acc[method].total += parseFloat(o.totalAmount) || 0;
+            return acc;
+        }, {});
+
+        // Expenses from Purchase (Inventory)
         const expenses = await Purchase.findAll({
             where: {
                 createdAt: { [Op.between]: [queryStart, queryEnd] },
@@ -133,6 +211,10 @@ exports.getStats = async (req, res) => {
             },
             onlineStats,
             paymentStats,
+            customerStats: {
+                firstTime: firstTimeCount,
+                returning: returningCount
+            },
             expenseStats: {
                 totalExpenses,
                 withdrawal: 0

@@ -30,12 +30,14 @@ exports.updateOutletConfig = async (req, res) => {
         if (outlet) {
             await outlet.update(updateData);
         } else {
+            // Provide default name if missing during creation
+            if (!updateData.name) updateData.name = 'New Outlet';
             outlet = await Outlet.create(updateData);
         }
 
         res.json({ success: true, data: outlet, message: 'Outlet configuration updated' });
     } catch (error) {
         console.error('Error updating outlet config:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 };

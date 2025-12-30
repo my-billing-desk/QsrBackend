@@ -25,6 +25,7 @@ async function seed() {
             }
         });
         const tenantId = tenant.id;
+        console.log(`[SEED] Created/Found Tenant "Sunburst Stack" with ID: ${tenantId}`);
 
         // Tenant 2: Trial User (Expiry in 7 days) - For testing
         const [trialTenant] = await Tenant.findOrCreate({
@@ -36,6 +37,7 @@ async function seed() {
                 subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             }
         });
+        console.log(`[SEED] Created/Found Tenant "Trial Coffee Shop" with ID: ${trialTenant.id}`);
 
         // Tenant 3: Expired Trial (Onboard Pending) - For testing
         const [expiredTenant] = await Tenant.findOrCreate({
@@ -48,8 +50,58 @@ async function seed() {
             }
         });
 
+        // 1.1 Outlet (Linked to Sunburst Tenant)
+        console.log('Seeding Outlet for Sunburst...');
+        await Outlet.create({
+            name: 'Sunburst Main Outlet',
+            email: 'main@sunburst.com',
+            address: '123 Tech Park, Innovation Way',
+            country: 'India',
+            state: 'Karnataka',
+            city: 'Bengaluru',
+            tenantId: tenantId,
+            themeName: 'Midnight Emerald (Dark)',
+            themeColor: '#34D399',
+            themePalette: JSON.stringify({
+                id: 'midnight_emerald',
+                name: 'Midnight Emerald (Dark)',
+                colors: ['#34D399', '#0F172A', '#1E293B', '#F8FAFC', '#020617'],
+                isPro: true,
+                type: 'dark',
+                settings: {
+                    '--bg-main': '#0F172A',
+                    '--bg-surface': '#1E293B',
+                    '--bg-sidebar': '#020617',
+                    '--bg-header': '#0F172A',
+                    '--text-main': '#F8FAFC',
+                    '--text-muted': '#94A3B8',
+                    '--color-primary': '#34D399',
+                    '--color-primary-hover': '#10B981',
+                    '--color-secondary': '#64748B',
+                    '--status-success': '#22C55E',
+                    '--status-warning': '#F59E0B',
+                    '--status-error': '#EF4444',
+                    '--status-info': '#3B82F6',
+                    '--border-color': '#334155',
+                    '--sidebar-active': 'rgba(52, 211, 153, 0.1)',
+                    '--sidebar-active-text': '#34D399',
+                    '--sidebar-text': '#94A3B8',
+                    '--pos-btn-pay': '#34D399',
+                    '--pos-btn-hold': '#F59E0B',
+                    '--pos-btn-save': '#64748B',
+                    '--pos-btn-cancel': '#EF4444',
+                    '--chart-1': '#34D399',
+                    '--chart-2': '#3B82F6',
+                    '--chart-3': '#8B5CF6',
+                    '--chart-4': '#64748B',
+                    '--chart-5': '#EC4899',
+                }
+            })
+        });
+        console.log('[SEED] Outlet Seeding Successfully Created');
+
         // 2. Users (Super Admin, Manager, Cashier, Kitchen)
-        console.log('Seeding Users...');
+        console.log(`Seeding Users for TenantID: ${tenantId}...`);
 
         // Super Admin
         await User.create({
@@ -303,6 +355,13 @@ async function seed() {
             slug: 'swiggy',
             isConnected: true,
             icon: 'https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png',
+            tenantId
+        });
+        await Aggregator.create({
+            name: 'ONDC',
+            slug: 'ondc',
+            isConnected: false,
+            icon: 'https://upload.wikimedia.org/wikipedia/commons/2/29/ONDC_Official_Logo.svg',
             tenantId
         });
 

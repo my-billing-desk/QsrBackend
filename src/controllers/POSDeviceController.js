@@ -101,7 +101,11 @@ exports.updateHeartbeat = async (req, res) => {
 // Get all devices for a tenant
 exports.getDevices = async (req, res) => {
     try {
-        const tenantId = req.user.tenantId;
+        const tenantId = req.user?.tenantId || req.tenantId;
+
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Tenant ID not found' });
+        }
 
         const devices = await POSDevice.findAll({
             where: { tenantId },

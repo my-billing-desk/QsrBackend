@@ -8,5 +8,6 @@ router.get('/', protect, aggregatorController.getAll);
 router.post('/:id/toggle', protect, aggregatorController.updateSettings);
 router.post('/:id/verify', protect, aggregatorController.verify);
 router.post('/webhook', aggregatorController.webhook);
+router.post('/ondc/confirm', aggregatorController.ondcWebhook);
 
 module.exports = router;

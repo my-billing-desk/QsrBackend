@@ -122,3 +122,89 @@ exports.webhook = async (req, res) => {
         res.status(500).json({ message: "Error processing webhook", error: error.message });
     }
 };
+
+exports.ondcWebhook = async (req, res) => {
+    try {
+        const { context, message } = req.body;
+        console.log('[ONDC_WEBHOOK] Received Payload:', JSON.stringify(req.body, null, 2));
+
+        // Basic Beckn Protocol Validation
+        if (!context || !message || !message.order) {
+            return res.status(400).json({
+                message: {
+                    ack: { status: "NACK" }
+                },
+                error: { message: "Invalid ONDC Payload Structure" }
+            });
+        }
+
+        // 1. Identify Tenant/Outlet from Provider ID
+        // ONDC 'provider.id' usually maps to our system's Merchant ID
+        const providerId = message.order.provider ? message.order.provider.id : null;
+
+        let aggregator = await Aggregator.findOne({
+            where: { merchantId: providerId }
+        });
+
+        // Fallback: If no provider match (simulation), look for generic 'ondc' aggregator
+        if (!aggregator) {
+            aggregator = await Aggregator.findOne({ where: { slug: 'ondc' } });
+        }
+
+        if (!aggregator) {
+            console.error('[ONDC_WEBHOOK] Aggregator configuration not found for ONDC/Provider');
+            return res.status(400).json({ message: { ack: { status: "NACK" } }, error: { message: "Store not configured for ONDC" } });
+        }
+
+        const orderDetails = message.order;
+        const billing = orderDetails.billing || {};
+        const quote = orderDetails.quote || {};
+
+        // 2. Map Status
+        // ONDC States: Created, Accepted, In-progress, Completed, Cancelled
+        let internalStatus = 'placed';
+        if (orderDetails.state === 'In-progress') internalStatus = 'preparing';
+        if (aggregator.autoAccept && internalStatus === 'placed') internalStatus = 'preparing';
+
+        const orderNum = orderDetails.id || `ONDC-${Date.now()}`;
+
+        // 3. Create Order
+        const newOrder = await Order.create({
+            orderNumber: orderNum,
+            source: 'ONDC',
+            type: 'delivery', // ONDC is primarily delivery
+            status: internalStatus,
+            paymentStatus: orderDetails.payment && orderDetails.payment.status === 'PAID' ? 'paid' : 'pending',
+            totalAmount: parseFloat(quote.price?.value || 0),
+            customerName: billing.name || 'ONDC User',
+            customerPhone: billing.phone || '',
+            paymentMode: 'Online',
+            tenantId: aggregator.tenantId
+        });
+
+        console.log(`[ONDC_WEBHOOK] Order Created: ${newOrder.id} for Tenant: ${aggregator.tenantId}`);
+
+        // 4. Return ACK (Beckn Standard)
+        res.status(200).json({
+            context: {
+                ...context,
+                timestamp: new Date().toISOString(),
+                action: 'on_confirm'
+            },
+            message: {
+                ack: {
+                    status: "ACK"
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('[ONDC_WEBHOOK] Error:', error);
+        res.status(500).json({
+            message: {
+                ack: { status: "NACK" }
+            },
+            error: { message: error.message }
+        });
+    }
+};
