@@ -23,16 +23,10 @@ exports.getStats = async (req, res) => {
 
         if (startDate && endDate) {
             queryStart = new Date(startDate);
-            // If it's a full ISO string, use it. If it's YYYY-MM-DD, set to start of day for start, end of day logic for end
-            // But usually frontend sends full ISO or we treat it carefully.
-            // Let's assume start implies 00:00:00 of that day if time not given? 
-            // Better: Frontend sends "2023-12-14T00:00:00" and "2023-12-14T23:59:59".
+            if (startDate.includes('T') === false) queryStart.setHours(0, 0, 0, 0);
 
             queryEnd = new Date(endDate);
-            // Safety: if endDate provided looks like a plain date, ensure we capture the end of it
-            if (!endDate.includes('T')) {
-                queryEnd.setHours(23, 59, 59, 999);
-            }
+            if (endDate.includes('T') === false) queryEnd.setHours(23, 59, 59, 999);
         } else {
             // Default: Today
             queryStart = new Date();
@@ -233,8 +227,10 @@ exports.getCharts = async (req, res) => {
 
         if (startDate && endDate) {
             queryStart = new Date(startDate);
+            if (startDate.includes('T') === false) queryStart.setHours(0, 0, 0, 0);
+
             queryEnd = new Date(endDate);
-            if (!endDate.includes('T')) queryEnd.setHours(23, 59, 59, 999);
+            if (endDate.includes('T') === false) queryEnd.setHours(23, 59, 59, 999);
         } else {
             queryStart = new Date();
             queryStart.setHours(0, 0, 0, 0);
@@ -316,8 +312,21 @@ exports.getCharts = async (req, res) => {
 
 exports.getRecentOrders = async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+        const whereClause = { tenantId: req.tenantId };
+
+        if (startDate && endDate) {
+            const queryStart = new Date(startDate);
+            if (!startDate.includes('T')) queryStart.setHours(0, 0, 0, 0);
+
+            const queryEnd = new Date(endDate);
+            if (!endDate.includes('T')) queryEnd.setHours(23, 59, 59, 999);
+
+            whereClause.createdAt = { [Op.between]: [queryStart, queryEnd] };
+        }
+
         const recentOrders = await Order.findAll({
-            where: { tenantId: req.tenantId },
+            where: whereClause,
             limit: 5,
             order: [['createdAt', 'DESC']],
             attributes: ['id', 'orderNumber', 'customerName', 'totalAmount', 'status', 'createdAt', 'type']
@@ -332,10 +341,23 @@ exports.getRecentOrders = async (req, res) => {
 exports.getTopItems = async (req, res) => {
     // Reusing logic from charts or separate if detailed
     try {
+        const { startDate, endDate } = req.query;
+        const orderWhere = { tenantId: req.tenantId };
+
+        if (startDate && endDate) {
+            const queryStart = new Date(startDate);
+            if (!startDate.includes('T')) queryStart.setHours(0, 0, 0, 0);
+
+            const queryEnd = new Date(endDate);
+            if (!endDate.includes('T')) queryEnd.setHours(23, 59, 59, 999);
+
+            orderWhere.createdAt = { [Op.between]: [queryStart, queryEnd] };
+        }
+
         const topItemsData = await OrderItem.findAll({
             include: [{
                 model: Order,
-                where: { tenantId: req.tenantId },
+                where: orderWhere,
                 attributes: []
             }],
             attributes: [
