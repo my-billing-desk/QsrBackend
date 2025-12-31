@@ -1,7 +1,7 @@
 const {
     sequelize, User, Category, Item, Variant, VariationGroup,
     RawMaterial, Supplier, Purchase, PurchaseItem,
-    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup, Aggregator
+    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup, Aggregator, Role
 } = require('./src/models');
 const bcrypt = require('bcryptjs');
 
@@ -100,6 +100,28 @@ async function seed() {
         });
         console.log('[SEED] Outlet Seeding Successfully Created');
 
+        // 1.2 Roles
+        console.log('Seeding Roles...');
+        const createDefaultRoles = async (tid) => {
+            const roles = [
+                { name: 'super_admin', description: 'System Owner' },
+                { name: 'admin', description: 'Restaurant Manager' },
+                { name: 'cashier', description: 'Counter Staff' },
+                { name: 'kitchen', description: 'KDS Access' },
+                { name: 'captain', description: 'Waiter/Captain App' }
+            ];
+            const createdRoles = {};
+            for (const r of roles) {
+                const role = await Role.create({ ...r, tenantId: tid, permissions: [] }); // Start with empty array, Admin can configure in UI
+                createdRoles[r.name] = role.id;
+            }
+            return createdRoles;
+        };
+
+        const sunburstRoles = await createDefaultRoles(tenantId);
+        const trialRoles = await createDefaultRoles(trialTenant.id);
+        const expiredRoles = await createDefaultRoles(expiredTenant.id);
+
         // 2. Users (Super Admin, Manager, Cashier, Kitchen)
         console.log(`Seeding Users for TenantID: ${tenantId}...`);
 
@@ -108,7 +130,7 @@ async function seed() {
             username: 'guna',
             password: 'king123',
             passcode: '1111',
-            role: 'super_admin',
+            roleId: sunburstRoles['super_admin'],
             displayName: 'Super Admin',
             email: 'sunburststack@gmail.com',
             tenantId: tenantId
@@ -118,10 +140,9 @@ async function seed() {
         await User.create({
             username: 'admin',
             password: 'admin123',
-            passcode: '1234',
-            role: 'admin',
-            displayName: 'Store Manager',
-            email: 'manager@sunburst.com',
+            passcode: '2222',
+            roleId: sunburstRoles['admin'],
+            displayName: 'Restaurant Admin',
             tenantId: tenantId
         });
 
@@ -130,7 +151,7 @@ async function seed() {
             username: 'trialuser',
             password: '123',
             passcode: '0000',
-            role: 'super_admin',
+            roleId: trialRoles['super_admin'],
             displayName: 'Trial User',
             email: 'trial@trialshop.com',
             tenantId: trialTenant.id
@@ -141,7 +162,7 @@ async function seed() {
             username: 'expireduser',
             password: '123',
             passcode: '9999',
-            role: 'super_admin',
+            roleId: expiredRoles['super_admin'],
             displayName: 'Expired User',
             email: 'expired@expiredshop.com',
             tenantId: expiredTenant.id
@@ -152,7 +173,7 @@ async function seed() {
             username: 'cashier',
             password: '123',
             passcode: '2024',
-            role: 'cashier',
+            roleId: sunburstRoles['cashier'],
             displayName: 'Cashier 1',
             email: 'cashier@sunburst.com',
             tenantId: tenantId
@@ -163,7 +184,7 @@ async function seed() {
             username: 'kitchen',
             password: '123',
             passcode: '3030',
-            role: 'kitchen',
+            roleId: sunburstRoles['kitchen'],
             displayName: 'Head Chef',
             email: 'chef@sunburst.com',
             tenantId: tenantId

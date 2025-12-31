@@ -1,4 +1,5 @@
 const { User, Tenant, Category, Item, Variant, AddonGroup, VariationGroup, Addon, Setting, POSDevice, Role } = require('../models');
+const emailService = require('../utils/emailService');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -338,7 +339,7 @@ exports.initTerminal = async (req, res) => {
             where: {
                 [Op.or]: [
                     { id: idOrSubdomain },
-                    { subdomain: idOrSubdomain }
+                    { subdomain: idOrSubdomain.toLowerCase() }
                 ]
             }
         });
@@ -348,28 +349,58 @@ exports.initTerminal = async (req, res) => {
             return res.status(404).json({ error: 'Restaurant not found. Please verify the ID or Subdomain.' });
         }
 
-        // Find the owner/super_admin to send OTP
-        const owner = await User.findOne({
-            where: { tenantId: tenant.id, role: 'super_admin' },
-            order: [['createdAt', 'ASC']]
-        });
-
-        if (!owner) {
-            return res.status(400).json({ error: 'No administrator found for this restaurant. Cannot proceed with secure linking.' });
-        }
+        // FETCH FULL SYNC DATA DIRECTLY (SKIPPING OTP)
+        console.log(`[INIT_DEBUG] Fetching sync payload for tenant: ${tenant.id}`);
+        const payload = await getSyncPayload(tenant.id);
+        console.log(`[INIT_DEBUG] Sync payload fetched successfully. Users: ${payload.users.length}, Items: ${payload.menu.items.length}`);
 
         res.json({
-            tenant: {
-                id: tenant.id,
-                name: tenant.name,
-                subdomain: tenant.subdomain
-            },
-            ownerEmail: maskEmail(owner.email),
-            requiresOTP: true
+            ...payload,
+            requiresOTP: false
         });
     } catch (error) {
+        console.error(`[INIT_ERROR] Failed for "${req.params.idOrSubdomain}":`, error);
         res.status(500).json({ error: error.message });
     }
+};
+
+const getSyncPayload = async (tenantId) => {
+    const tenant = await Tenant.findByPk(tenantId);
+    if (!tenant) throw new Error('Tenant not found');
+
+    const users = await User.findAll({
+        where: { tenantId: tenant.id },
+        attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
+        include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
+    });
+
+    const categories = await Category.findAll({ where: { tenantId: tenant.id } });
+    const items = await Item.findAll({
+        where: { tenantId: tenant.id },
+        include: [
+            { model: Variant },
+            { model: AddonGroup, as: 'addonGroups', include: [Addon] },
+            { model: VariationGroup, as: 'variationGroups', include: [Variant] }
+        ]
+    });
+
+    const settings = await Setting.findAll({ where: { tenantId: tenant.id } });
+    const settingsObj = {};
+    settings.forEach(s => settingsObj[s.key] = s.value);
+
+    return {
+        tenant: {
+            id: tenant.id,
+            name: tenant.name,
+            subdomain: tenant.subdomain
+        },
+        users,
+        menu: {
+            categories,
+            items
+        },
+        settings: settingsObj
+    };
 };
 
 exports.sendOTP = async (req, res) => {
@@ -379,7 +410,12 @@ exports.sendOTP = async (req, res) => {
         if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
         const owner = await User.findOne({
-            where: { tenantId: tenant.id, role: 'super_admin' },
+            where: { tenantId: tenant.id },
+            include: [{
+                model: Role,
+                as: 'roleData',
+                where: { name: 'super_admin' }
+            }],
             order: [['createdAt', 'ASC']]
         });
 
@@ -396,12 +432,8 @@ exports.sendOTP = async (req, res) => {
             expires: Date.now() + 10 * 60 * 1000
         });
 
-        // SIMULATED EMAIL SENDING
-        console.log(`\n\n========================================`);
-        console.log(`[EMAIL SIMULATOR] TO: ${owner.email}`);
-        console.log(`[EMAIL SIMULATOR] SUBJECT: POS Linking OTP`);
-        console.log(`[EMAIL SIMULATOR] BODY: Your OTP for linking POS to ${tenant.name} is: ${otp}`);
-        console.log(`========================================\n\n`);
+        // REAL EMAIL SENDING
+        await emailService.sendOTP(owner.email, otp, tenant.name);
 
         res.json({ message: `OTP sent to ${maskEmail(owner.email)}` });
     } catch (error) {
@@ -427,38 +459,8 @@ exports.verifyOTP = async (req, res) => {
         otpStore.delete(tenantId);
 
         // Fetch full sync payload
-        const tenant = await Tenant.findByPk(tenantId);
-        const users = await User.findAll({
-            where: { tenantId: tenant.id },
-            attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
-            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
-        });
-        const categories = await Category.findAll({ where: { tenantId: tenant.id } });
-        const items = await Item.findAll({
-            where: { tenantId: tenant.id },
-            include: [
-                { model: Variant },
-                { model: AddonGroup, as: 'addonGroups', include: [Addon] },
-                { model: VariationGroup, as: 'variationGroups', include: [Variant] }
-            ]
-        });
-        const settings = await Setting.findAll({ where: { tenantId: tenant.id } });
-        const settingsObj = {};
-        settings.forEach(s => settingsObj[s.key] = s.value);
-
-        res.json({
-            tenant: {
-                id: tenant.id,
-                name: tenant.name,
-                subdomain: tenant.subdomain
-            },
-            users,
-            menu: {
-                categories,
-                items
-            },
-            settings: settingsObj
-        });
+        const payload = await getSyncPayload(tenantId);
+        res.json(payload);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -493,13 +495,14 @@ exports.googleCallback = (req, res, next) => {
             return res.redirect('http://localhost:5174/login?error=auth_failed');
         }
 
+        const userRole = user.roleData?.name || user.role;
         // Only Super Admin can login via Google
-        if (user.role !== 'super_admin') {
+        if (userRole !== 'super_admin') {
             return res.redirect('http://localhost:5174/login?error=unauthorized_role');
         }
 
         const token = jwt.sign(
-            { id: user.id, role: user.role, name: user.displayName },
+            { id: user.id, role: userRole, name: user.displayName },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
