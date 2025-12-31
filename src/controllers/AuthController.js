@@ -1,9 +1,21 @@
-const { User, Tenant, Category, Item, Variant, AddonGroup, VariationGroup, Addon, Setting, POSDevice } = require('../models');
+const { User, Tenant, Category, Item, Variant, AddonGroup, VariationGroup, Addon, Setting, POSDevice, Role } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+
+// In-memory OTP store (Use Redis or DB for production)
+const otpStore = new Map();
+
+const maskEmail = (email) => {
+    if (!email) return 'N/A';
+    const [name, domain] = email.split('@');
+    const maskedName = name.length > 2
+        ? name.substring(0, 2) + '*'.repeat(name.length - 2)
+        : name[0] + '*';
+    return `${maskedName}@${domain}`;
+};
 
 exports.login = async (req, res) => {
     try {
@@ -29,7 +41,10 @@ exports.login = async (req, res) => {
 
             const users = await User.findAll({
                 where: { tenantId: resolvedTenantId },
-                include: [{ model: Tenant }]
+                include: [
+                    { model: Tenant },
+                    { model: Role, as: 'roleData' }
+                ]
             });
 
             let validUser = null;
@@ -71,7 +86,10 @@ exports.login = async (req, res) => {
 
         let possibleUsers = await User.findAll({
             where: query,
-            include: [{ model: Tenant }]
+            include: [
+                { model: Tenant },
+                { model: Role, as: 'roleData' }
+            ]
         });
 
         if (possibleUsers.length === 0) {
@@ -158,8 +176,11 @@ async function sendLoginResponse(user, res) {
         }
     }
 
+    const permissions = user.roleData ? user.roleData.permissions : [];
+    const roleName = user.roleData ? user.roleData.name : 'guest';
+
     const token = jwt.sign(
-        { id: user.id, role: user.role, name: user.displayName, tenantId: user.tenantId },
+        { id: user.id, role: roleName, name: user.displayName, tenantId: user.tenantId, permissions },
         JWT_SECRET,
         { expiresIn: '24h' }
     );
@@ -169,11 +190,13 @@ async function sendLoginResponse(user, res) {
         user: {
             id: user.id,
             username: user.username,
-            role: user.role,
+            role: roleName,
             name: user.displayName,
             tenantId: user.tenantId,
             tenantName: user.Tenant?.name,
-            tenantStatus: user.Tenant?.status // Send status to frontend to distinguish trial vs active
+            tenantStatus: user.Tenant?.status, // Send status to frontend to distinguish trial vs active
+            roleId: user.roleId,
+            permissions
         },
         daysLeft // Renamed from trialDaysLeft to generic daysLeft, but we can fallback map it in frontend
     });
@@ -182,15 +205,15 @@ async function sendLoginResponse(user, res) {
 
 exports.register = async (req, res) => {
     try {
-        const { username, password, role, displayName, permissions } = req.body;
+        const { username, password, displayName, roleId, email } = req.body;
         const tenantId = req.user.tenantId; // Get from authenticated user
 
         const user = await User.create({
             username,
             password,
-            role,
             displayName,
-            permissions,
+            email,
+            roleId,
             tenantId
         });
 
@@ -206,9 +229,84 @@ exports.getUsers = async (req, res) => {
     try {
         const users = await User.findAll({
             where: { tenantId: req.user.tenantId },
-            attributes: { exclude: ['password', 'passcode'] }
+            attributes: { exclude: ['password', 'passcode'] },
+            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
         });
         res.json(users);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.updateUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { username, password, displayName, passcode, roleId, email } = req.body;
+
+        const user = await User.findOne({
+            where: { id, tenantId: req.user.tenantId }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Owner protection: If trying to change roleId away from super_admin
+        if (roleId !== undefined && roleId !== user.roleId) {
+            const superAdminRole = await Role.findOne({ where: { name: 'super_admin', tenantId: req.user.tenantId } });
+            if (superAdminRole && user.roleId === superAdminRole.id) {
+                const superAdminCount = await User.count({ where: { roleId: superAdminRole.id, tenantId: req.user.tenantId } });
+                if (superAdminCount <= 1) {
+                    return res.status(400).json({ error: 'At least one owner (super_admin) is required. Cannot demote the last owner.' });
+                }
+            }
+        }
+
+        // Update fields
+        if (username) user.username = username;
+        if (email) user.email = email; // Allow email updates
+        if (password) user.password = password; // Hook in model handles hashing
+        if (displayName) user.displayName = displayName;
+        if (passcode) user.passcode = passcode; // Hook in model handles hashing
+        if (roleId !== undefined) user.roleId = roleId;
+
+        await user.save();
+
+        const { password: _, passcode: __, ...userData } = user.toJSON();
+        res.json(userData);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
+exports.deleteUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Prevent self-deletion
+        if (parseInt(id) === req.user.id) {
+            return res.status(400).json({ error: 'Cannot delete yourself' });
+        }
+
+        const user = await User.findOne({
+            where: { id, tenantId: req.user.tenantId }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Owner protection: Check if this is the last super_admin
+        const superAdminRole = await Role.findOne({ where: { name: 'super_admin', tenantId: req.user.tenantId } });
+        if (superAdminRole && user.roleId === superAdminRole.id) {
+            const superAdminCount = await User.count({ where: { roleId: superAdminRole.id, tenantId: req.user.tenantId } });
+            if (superAdminCount <= 1) {
+                return res.status(400).json({ error: 'At least one owner (super_admin) is required for admin access' });
+            }
+        }
+
+        await user.destroy();
+        res.json({ message: 'User deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -221,7 +319,8 @@ exports.syncUsers = async (req, res) => {
         }
         const users = await User.findAll({
             where: { tenantId: req.user.tenantId },
-            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId']
+            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId', 'roleId'],
+            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
         });
         res.json(users);
     } catch (error) {
@@ -249,26 +348,101 @@ exports.initTerminal = async (req, res) => {
             return res.status(404).json({ error: 'Restaurant not found. Please verify the ID or Subdomain.' });
         }
 
-        // Fetch Users (with hashes for offline login)
-        const users = await User.findAll({
-            where: { tenantId: tenant.id },
-            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId']
+        // Find the owner/super_admin to send OTP
+        const owner = await User.findOne({
+            where: { tenantId: tenant.id, role: 'super_admin' },
+            order: [['createdAt', 'ASC']]
         });
 
-        // Fetch Menu
+        if (!owner) {
+            return res.status(400).json({ error: 'No administrator found for this restaurant. Cannot proceed with secure linking.' });
+        }
+
+        res.json({
+            tenant: {
+                id: tenant.id,
+                name: tenant.name,
+                subdomain: tenant.subdomain
+            },
+            ownerEmail: maskEmail(owner.email),
+            requiresOTP: true
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.sendOTP = async (req, res) => {
+    try {
+        const { tenantId } = req.body;
+        const tenant = await Tenant.findByPk(tenantId);
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+        const owner = await User.findOne({
+            where: { tenantId: tenant.id, role: 'super_admin' },
+            order: [['createdAt', 'ASC']]
+        });
+
+        if (!owner || !owner.email) {
+            return res.status(400).json({ error: 'Admin email not found' });
+        }
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Store in memory for 10 minutes
+        otpStore.set(tenant.id, {
+            otp,
+            expires: Date.now() + 10 * 60 * 1000
+        });
+
+        // SIMULATED EMAIL SENDING
+        console.log(`\n\n========================================`);
+        console.log(`[EMAIL SIMULATOR] TO: ${owner.email}`);
+        console.log(`[EMAIL SIMULATOR] SUBJECT: POS Linking OTP`);
+        console.log(`[EMAIL SIMULATOR] BODY: Your OTP for linking POS to ${tenant.name} is: ${otp}`);
+        console.log(`========================================\n\n`);
+
+        res.json({ message: `OTP sent to ${maskEmail(owner.email)}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.verifyOTP = async (req, res) => {
+    try {
+        const { tenantId, otp } = req.body;
+
+        const stored = otpStore.get(tenantId);
+        if (!stored) return res.status(400).json({ error: 'OTP not requested or expired' });
+        if (Date.now() > stored.expires) {
+            otpStore.delete(tenantId);
+            return res.status(400).json({ error: 'OTP expired' });
+        }
+        if (stored.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        // OTP Valid - Clear it
+        otpStore.delete(tenantId);
+
+        // Fetch full sync payload
+        const tenant = await Tenant.findByPk(tenantId);
+        const users = await User.findAll({
+            where: { tenantId: tenant.id },
+            attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
+            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
+        });
         const categories = await Category.findAll({ where: { tenantId: tenant.id } });
         const items = await Item.findAll({
             where: { tenantId: tenant.id },
             include: [
                 { model: Variant },
-                { model: AddonGroup, as: 'addonGroups', include: [Addon] }, // Include Addons in AddonGroup
-                { model: VariationGroup, as: 'variationGroups', include: [Variant] } // Include Variants in VariationGroup
+                { model: AddonGroup, as: 'addonGroups', include: [Addon] },
+                { model: VariationGroup, as: 'variationGroups', include: [Variant] }
             ]
         });
-
-        // Fetch Settings
         const settings = await Setting.findAll({ where: { tenantId: tenant.id } });
-        // Convert settings array to object
         const settingsObj = {};
         settings.forEach(s => settingsObj[s.key] = s.value);
 
@@ -293,7 +467,10 @@ exports.initTerminal = async (req, res) => {
 exports.getProfile = async (req, res) => {
     try {
         const user = await User.findByPk(req.user.id, {
-            include: [{ model: Tenant }]
+            include: [
+                { model: Tenant },
+                { model: Role, as: 'roleData' }
+            ]
         });
 
         if (!user) {

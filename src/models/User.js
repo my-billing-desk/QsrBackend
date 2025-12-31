@@ -22,20 +22,7 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: true
     },
-    role: {
-        type: DataTypes.ENUM(
-            'super_admin',       // System-wide access
-            'admin',             // Brand/Tenant-wide access
-            'zone_manager',      // Multiple cities/states
-            'area_manager',      // Cluster of restaurants in an area
-            'city_manager',      // All branches in a city
-            'restaurant_manager',// Single outlet management
-            'shift_manager',     // Management for a specific shift in an outlet
-            'cashier',           // Billing only
-            'waiter'             // KOT only
-        ),
-        defaultValue: 'cashier'
-    },
+
     // Hierarchical Scope
     assignedOutletId: {
         type: DataTypes.INTEGER,
@@ -70,10 +57,6 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: true
     },
-    permissions: {
-        type: DataTypes.JSON, // Stores permissions as a JSON object
-        allowNull: true
-    },
     passcode: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -83,6 +66,10 @@ const User = sequelize.define('User', {
         type: DataTypes.UUID,
         allowNull: true,
         unique: 'user_tenant_unique'
+    },
+    roleId: {
+        type: DataTypes.UUID,
+        allowNull: true
     }
 });
 

@@ -37,6 +37,7 @@ const POSDevice = require('./POSDevice');
 const CashMovement = require('./CashMovement');
 const StockTransaction = require('./StockTransaction');
 const Customer = require('./Customer');
+const Role = require('./Role');
 
 // Relationships
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -143,6 +144,13 @@ Customer.belongsTo(Tenant, { foreignKey: 'tenantId' });
 Order.belongsTo(Customer, { foreignKey: 'customerId' });
 Customer.hasMany(Order, { foreignKey: 'customerId' });
 
+// Role Relationships
+Tenant.hasMany(Role, { foreignKey: 'tenantId' });
+Role.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+User.belongsTo(Role, { foreignKey: 'roleId', as: 'roleData' });
+Role.hasMany(User, { foreignKey: 'roleId', as: 'users' });
+
 module.exports = {
     sequelize,
     Category,
@@ -177,5 +185,6 @@ module.exports = {
     POSDevice,
     CashMovement,
     StockTransaction,
-    Customer
+    Customer,
+    Role
 };

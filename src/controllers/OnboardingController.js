@@ -38,21 +38,35 @@ exports.signup = async (req, res) => {
             subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         }, { transaction: t });
 
-        // 3. Create Super Admin User
+        // 3. Create Default Role for Super Admin
+        const { Role } = require('../models');
+        const role = await Role.create({
+            name: 'super_admin',
+            tenantId: tenant.id,
+            description: 'Full System Access',
+            permissions: [] // You can pre-fill this if you have a default set
+        }, { transaction: t });
+
+        // 4. Create Super Admin User
         const user = await User.create({
             username: email.split('@')[0], // Generate simple username
             email,
             password,
             displayName: name || businessName,
             phone: phone || null,
-            role: 'super_admin',
+            roleId: role.id,
             tenantId: tenant.id
         }, { transaction: t });
 
         await t.commit();
 
-        // 4. Generate Token
-        const token = generateToken(user, tenant);
+        // Load the role data for the response
+        const userWithRole = await User.findByPk(user.id, {
+            include: [{ model: Role, as: 'roleData' }, { model: Tenant }]
+        });
+
+        // 5. Generate Token
+        const token = generateToken(userWithRole, tenant);
 
         res.status(201).json({
             message: 'Account created successfully',
@@ -63,12 +77,12 @@ exports.signup = async (req, res) => {
                 subdomain: tenant.subdomain
             },
             user: {
-                id: user.id,
-                email: user.email,
-                username: user.username,
-                name: user.displayName,
-                role: user.role,
-                tenantId: user.tenantId
+                id: userWithRole.id,
+                email: userWithRole.email,
+                username: userWithRole.username,
+                name: userWithRole.displayName,
+                role: 'super_admin',
+                tenantId: userWithRole.tenantId
             }
         });
 

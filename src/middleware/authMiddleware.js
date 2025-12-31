@@ -14,13 +14,24 @@ const protect = async (req, res, next) => {
             // console.log('[AUTH DEBUG] Decoded:', decoded);
 
             // Get user from token
+            const { Role } = require('../models');
             req.user = await User.findByPk(decoded.id, {
-                attributes: ['id', 'username', 'email', 'role', 'tenantId']
+                attributes: ['id', 'username', 'email', 'tenantId', 'roleId'],
+                include: [{ model: Role, as: 'roleData', attributes: ['name'] }]
             });
 
             if (!req.user) {
                 console.error('[AUTH ERROR] User not found for ID:', decoded.id);
                 return res.status(401).json({ error: 'User not found' });
+            }
+
+            // Map the Role table name to req.user.role for backward compatibility with authorize middleware
+            if (req.user.roleData) {
+                req.user.role = req.user.roleData.name;
+            } else {
+                // Special case for existing super_admins who might not have a roleId yet
+                // Or we can fallback to 'guest'
+                req.user.role = 'guest';
             }
 
             // First preference: Use tenantId from the user object (most reliable source of truth)
@@ -65,4 +76,18 @@ const protect = async (req, res, next) => {
     }
 };
 
-module.exports = { protect };
+const authorize = (...roles) => {
+    return (req, res, next) => {
+        if (!roles.includes(req.user.role)) {
+            console.warn(`[AUTH FORBIDDEN] User ${req.user.username} (Role: ${req.user.role}) tried to access protected route requiring: ${roles.join(', ')}`);
+            return res.status(403).json({
+                error: 'User is not authorized to access this resource',
+                requiredRoles: roles,
+                userRole: req.user.role
+            });
+        }
+        next();
+    };
+};
+
+module.exports = { protect, authorize };

@@ -110,7 +110,7 @@ async function seed() {
             passcode: '1111',
             role: 'super_admin',
             displayName: 'Super Admin',
-            email: 'guna.swtkiller@gmail.com',
+            email: 'sunburststack@gmail.com',
             tenantId: tenantId
         });
 
