@@ -329,7 +329,7 @@ exports.getRecentOrders = async (req, res) => {
             where: whereClause,
             limit: 5,
             order: [['createdAt', 'DESC']],
-            attributes: ['id', 'orderNumber', 'customerName', 'totalAmount', 'status', 'createdAt', 'type']
+            attributes: ['id', 'orderNumber', 'customerName', 'totalAmount', 'status', 'createdAt', 'type', 'source']
         });
         res.json(recentOrders);
     } catch (error) {
