@@ -1,5 +1,6 @@
 const { Order, OrderItem, Purchase, Aggregator, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { getStartOfDayIST, getEndOfDayIST } = require('../utils/dateUtils');
 
 // Helper function to calculate time since
 function timeSince(date) {
@@ -22,18 +23,12 @@ exports.getStats = async (req, res) => {
         let queryStart, queryEnd;
 
         if (startDate && endDate) {
-            queryStart = new Date(startDate);
-            if (startDate.includes('T') === false) queryStart.setHours(0, 0, 0, 0);
-
-            queryEnd = new Date(endDate);
-            if (endDate.includes('T') === false) queryEnd.setHours(23, 59, 59, 999);
+            queryStart = getStartOfDayIST(startDate);
+            queryEnd = getEndOfDayIST(endDate);
         } else {
-            // Default: Today
-            queryStart = new Date();
-            queryStart.setHours(0, 0, 0, 0);
-
-            queryEnd = new Date();
-            queryEnd.setHours(23, 59, 59, 999);
+            // Default: Today in IST
+            queryStart = getStartOfDayIST();
+            queryEnd = getEndOfDayIST();
         }
 
         // Fetch orders and filter in memory to avoid Timezone/SQLite date weirdness
@@ -226,16 +221,11 @@ exports.getCharts = async (req, res) => {
         let queryStart, queryEnd;
 
         if (startDate && endDate) {
-            queryStart = new Date(startDate);
-            if (startDate.includes('T') === false) queryStart.setHours(0, 0, 0, 0);
-
-            queryEnd = new Date(endDate);
-            if (endDate.includes('T') === false) queryEnd.setHours(23, 59, 59, 999);
+            queryStart = getStartOfDayIST(startDate);
+            queryEnd = getEndOfDayIST(endDate);
         } else {
-            queryStart = new Date();
-            queryStart.setHours(0, 0, 0, 0);
-            queryEnd = new Date();
-            queryEnd.setHours(23, 59, 59, 999);
+            queryStart = getStartOfDayIST();
+            queryEnd = getEndOfDayIST();
         }
 
         const rawOrders = await Order.findAll({
@@ -316,13 +306,7 @@ exports.getRecentOrders = async (req, res) => {
         const whereClause = { tenantId: req.tenantId };
 
         if (startDate && endDate) {
-            const queryStart = new Date(startDate);
-            if (!startDate.includes('T')) queryStart.setHours(0, 0, 0, 0);
-
-            const queryEnd = new Date(endDate);
-            if (!endDate.includes('T')) queryEnd.setHours(23, 59, 59, 999);
-
-            whereClause.createdAt = { [Op.between]: [queryStart, queryEnd] };
+            whereClause.createdAt = { [Op.between]: [getStartOfDayIST(startDate), getEndOfDayIST(endDate)] };
         }
 
         const recentOrders = await Order.findAll({
@@ -345,13 +329,7 @@ exports.getTopItems = async (req, res) => {
         const orderWhere = { tenantId: req.tenantId };
 
         if (startDate && endDate) {
-            const queryStart = new Date(startDate);
-            if (!startDate.includes('T')) queryStart.setHours(0, 0, 0, 0);
-
-            const queryEnd = new Date(endDate);
-            if (!endDate.includes('T')) queryEnd.setHours(23, 59, 59, 999);
-
-            orderWhere.createdAt = { [Op.between]: [queryStart, queryEnd] };
+            orderWhere.createdAt = { [Op.between]: [getStartOfDayIST(startDate), getEndOfDayIST(endDate)] };
         }
 
         const topItemsData = await OrderItem.findAll({

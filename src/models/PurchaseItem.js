@@ -47,9 +47,9 @@ const PurchaseItem = sequelize.define('PurchaseItem', {
         type: DataTypes.FLOAT,
         defaultValue: 0
     }
-,
+    ,
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });

@@ -2,12 +2,13 @@ const {
     RawMaterial, Recipe, RecipeIngredient, Item, Variant,
     Supplier, Purchase, PurchaseItem, PurchaseOrder, PurchaseOrderItem,
     PurchaseReturn, PurchaseReturnItem, Wastage, WastageItem, sequelize,
-    Order, OrderItem // Imported for consumption reports
+    Order, OrderItem, StockTransaction // Added StockTransaction
 } = require('../models');
 const { Op } = require('sequelize');
+const { getTodayIST, getStartOfDayIST, getEndOfDayIST } = require('../utils/dateUtils');
+const { logToFile } = require('../utils/logger');
 
 // --- Raw Materials ---
-
 exports.getRawMaterials = async (req, res) => {
     try {
         if (!req.tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
@@ -74,14 +75,8 @@ exports.deleteRawMaterial = async (req, res) => {
 };
 
 // --- Recipes ---
-
 exports.getRecipes = async (req, res) => {
     try {
-        // Build a recipe list. It might be Items that HAVE recipes.
-        // Or just listing the Recipe table.
-        // The screenshot implies viewing items and checking if they have recipes.
-
-        // Let's return recipes with included item details
         const recipes = await Recipe.findAll({
             where: { tenantId: req.tenantId },
             include: [
@@ -100,19 +95,13 @@ exports.getRecipeByItem = async (req, res) => {
     try {
         const { itemId, variantId } = req.query;
         if (!itemId && !variantId) return res.status(400).json({ error: 'itemId or variantId required' });
-
-        const whereClause = {};
+        const whereClause = { tenantId: req.tenantId };
         if (itemId) whereClause.itemId = itemId;
         if (variantId) whereClause.variantId = variantId;
-        whereClause.tenantId = req.tenantId;
-
         const recipe = await Recipe.findOne({
             where: whereClause,
-            include: [
-                { model: RecipeIngredient, include: [RawMaterial] }
-            ]
+            include: [{ model: RecipeIngredient, include: [RawMaterial] }]
         });
-
         if (!recipe) return res.status(404).json({ message: 'No recipe found' });
         res.json(recipe);
     } catch (error) {
@@ -123,26 +112,16 @@ exports.getRecipeByItem = async (req, res) => {
 exports.saveRecipe = async (req, res) => {
     try {
         const { itemId, variantId, yieldQty, instructions, ingredients, autoConsumption } = req.body;
-        // ingredients: [{ rawMaterialId, quantity, unit, ... }]
-
-        // Check for existing recipe
-        const whereClause = {};
+        const whereClause = { tenantId: req.tenantId };
         if (itemId) whereClause.itemId = itemId;
         if (variantId) whereClause.variantId = variantId;
-        whereClause.tenantId = req.tenantId;
-
         let recipe = await Recipe.findOne({ where: whereClause });
-
         if (recipe) {
-            // Update
             await recipe.update({ yieldQty, instructions, autoConsumption });
-            // Replace ingredients
             await RecipeIngredient.destroy({ where: { recipeId: recipe.id } });
         } else {
-            // Create
             recipe = await Recipe.create({ itemId, variantId, yieldQty, instructions, autoConsumption, tenantId: req.tenantId });
         }
-
         if (ingredients && ingredients.length > 0) {
             const ingredientPromises = ingredients.map(ing => RecipeIngredient.create({
                 recipeId: recipe.id,
@@ -153,11 +132,9 @@ exports.saveRecipe = async (req, res) => {
             }));
             await Promise.all(ingredientPromises);
         }
-
         const completeRecipe = await Recipe.findByPk(recipe.id, {
             include: [{ model: RecipeIngredient, include: [RawMaterial] }]
         });
-
         res.json(completeRecipe);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -168,9 +145,7 @@ exports.deleteRecipe = async (req, res) => {
     try {
         const { id } = req.params;
         const recipe = await Recipe.findOne({ where: { id, tenantId: req.tenantId } });
-        if (!recipe) {
-            return res.status(404).json({ error: 'Recipe not found' });
-        }
+        if (!recipe) return res.status(404).json({ error: 'Recipe not found' });
         await RecipeIngredient.destroy({ where: { recipeId: id } });
         await recipe.destroy();
         res.json({ message: 'Recipe deleted' });
@@ -178,8 +153,8 @@ exports.deleteRecipe = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-// --- Suppliers ---
 
+// --- Suppliers ---
 exports.getSuppliers = async (req, res) => {
     try {
         const suppliers = await Supplier.findAll({ where: { tenantId: req.tenantId } });
@@ -199,7 +174,6 @@ exports.createSupplier = async (req, res) => {
 };
 
 // --- Purchases ---
-
 exports.getPurchases = async (req, res) => {
     try {
         const purchases = await Purchase.findAll({
@@ -218,33 +192,34 @@ exports.getPurchases = async (req, res) => {
 exports.createPurchase = async (req, res) => {
     try {
         const { items, ...purchaseData } = req.body;
-
         const purchase = await Purchase.create({ ...purchaseData, tenantId: req.tenantId });
-
         if (items && items.length > 0) {
             const itemPromises = items.map(async item => {
-                // Add item to purchase
-                await PurchaseItem.create({
-                    ...item,
-                    purchaseId: purchase.id
-                });
-
-                // Update Raw Material Stock
+                await PurchaseItem.create({ ...item, purchaseId: purchase.id, tenantId: req.tenantId });
                 const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId);
                 if (rawMaterial) {
-                    await rawMaterial.increment('currentStock', { by: parseFloat(item.quantity) });
-                    // Optionally update purchase price
-                    if (item.price > 0) {
-                        await rawMaterial.update({ purchasePrice: item.price });
-                    }
+                    const oldStock = rawMaterial.currentStock;
+                    const newStock = oldStock + parseFloat(item.quantity);
+                    await rawMaterial.update({
+                        currentStock: newStock,
+                        purchasePrice: item.price > 0 ? item.price : rawMaterial.purchasePrice
+                    });
+
+                    // Add Stock Transaction
+                    await StockTransaction.create({
+                        type: 'purchase',
+                        rawMaterialId: rawMaterial.id,
+                        quantityChange: parseFloat(item.quantity),
+                        currentStock: newStock,
+                        purchaseId: purchase.id,
+                        tenantId: req.tenantId,
+                        notes: `Purchase Inward - Inv: ${purchase.invoiceNumber}`
+                    });
                 }
             });
             await Promise.all(itemPromises);
         }
-
-        const completePurchase = await Purchase.findByPk(purchase.id, {
-            include: [{ model: PurchaseItem }]
-        });
+        const completePurchase = await Purchase.findByPk(purchase.id, { include: [{ model: PurchaseItem }] });
         res.status(201).json(completePurchase);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -252,15 +227,11 @@ exports.createPurchase = async (req, res) => {
 };
 
 // --- Purchase Orders ---
-
 exports.getPurchaseOrders = async (req, res) => {
     try {
         const orders = await PurchaseOrder.findAll({
             where: { tenantId: req.tenantId },
-            include: [
-                { model: Supplier },
-                { model: PurchaseOrderItem, include: [RawMaterial] }
-            ]
+            include: [{ model: Supplier }, { model: PurchaseOrderItem, include: [RawMaterial] }]
         });
         res.json(orders);
     } catch (error) {
@@ -272,61 +243,38 @@ exports.receivePurchaseOrder = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { items, invoiceNumber, invoiceDate } = req.body; // Items with receivedQty and price
-
+        const { items, invoiceNumber, invoiceDate } = req.body;
         const po = await PurchaseOrder.findOne({ where: { id, tenantId: req.tenantId } });
-        if (!po) {
+        if (!po || po.status === 'Received') {
             await t.rollback();
-            return res.status(404).json({ error: 'Purchase Order not found' });
+            return res.status(po ? 400 : 404).json({ error: po ? 'PO already received' : 'Purchase Order not found' });
         }
-
-        if (po.status === 'Received') {
-            await t.rollback();
-            return res.status(400).json({ error: 'PO already received' });
-        }
-
-        // Update PO Status
         await po.update({ status: 'Received', deliveryDate: new Date() }, { transaction: t });
-
-        // Create a definitive Purchase Record (GRN)
         const purchase = await Purchase.create({
             supplierId: po.supplierId,
             invoiceNumber: invoiceNumber || `PO-${po.poNumber}`,
             invoiceDate: invoiceDate || new Date(),
-            totalAmount: items.reduce((sum, item) => sum + (item.quantity * item.price), 0), // Calc total
+            totalAmount: items.reduce((sum, item) => sum + (item.quantity * item.price), 0),
             status: 'Completed',
             tenantId: req.tenantId
         }, { transaction: t });
-
-        // Process Items
         if (items && items.length > 0) {
             for (const item of items) {
-                // Update PO Item (Received Qty)
                 await PurchaseOrderItem.update(
                     { quantityReceived: item.quantity, price: item.price, amount: item.quantity * item.price },
                     { where: { purchaseOrderId: id, rawMaterialId: item.rawMaterialId }, transaction: t }
                 );
-
-                // Add to Purchase Record
                 await PurchaseItem.create({
-                    purchaseId: purchase.id,
-                    rawMaterialId: item.rawMaterialId,
-                    quantity: item.quantity,
-                    unit: item.unit,
-                    price: item.price,
-                    amount: item.quantity * item.price
+                    purchaseId: purchase.id, rawMaterialId: item.rawMaterialId,
+                    quantity: item.quantity, unit: item.unit, price: item.price, amount: item.quantity * item.price
                 }, { transaction: t });
-
-                // Update Stock
                 const material = await RawMaterial.findByPk(item.rawMaterialId);
                 if (material) {
                     await material.increment('currentStock', { by: parseFloat(item.quantity), transaction: t });
-                    // Update latest purchase price
                     await material.update({ purchasePrice: item.price }, { transaction: t });
                 }
             }
         }
-
         await t.commit();
         res.json({ message: 'PO Received and Stock Updated', purchase });
     } catch (error) {
@@ -339,31 +287,22 @@ exports.createPurchaseOrder = async (req, res) => {
     try {
         const { items, ...poData } = req.body;
         const po = await PurchaseOrder.create({ ...poData, tenantId: req.tenantId });
-
         if (items && items.length > 0) {
-            const itemPromises = items.map(item => PurchaseOrderItem.create({
-                ...item,
-                purchaseOrderId: po.id
-            }));
+            const itemPromises = items.map(item => PurchaseOrderItem.create({ ...item, purchaseOrderId: po.id }));
             await Promise.all(itemPromises);
         }
-
         res.status(201).json(po);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 };
 
-// --- Purchase Returns ---
-
+// --- Return, Stats, etc. (Truncated for brevity, but kept complete in the actual file)
 exports.getPurchaseReturns = async (req, res) => {
     try {
         const returns = await PurchaseReturn.findAll({
             where: { tenantId: req.tenantId },
-            include: [
-                { model: Supplier },
-                { model: PurchaseReturnItem, include: [RawMaterial] }
-            ]
+            include: [{ model: Supplier }, { model: PurchaseReturnItem, include: [RawMaterial] }]
         });
         res.json(returns);
     } catch (error) {
@@ -375,18 +314,11 @@ exports.createPurchaseReturn = async (req, res) => {
     try {
         const { items, ...prData } = req.body;
         const pr = await PurchaseReturn.create({ ...prData, tenantId: req.tenantId });
-
         if (items && items.length > 0) {
             const itemPromises = items.map(async item => {
-                await PurchaseReturnItem.create({
-                    ...item,
-                    purchaseReturnId: pr.id
-                });
-                // Deduct Stock
+                await PurchaseReturnItem.create({ ...item, purchaseReturnId: pr.id });
                 const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId);
-                if (rawMaterial) {
-                    await rawMaterial.decrement('currentStock', { by: parseFloat(item.quantity) });
-                }
+                if (rawMaterial) await rawMaterial.decrement('currentStock', { by: parseFloat(item.quantity) });
             });
             await Promise.all(itemPromises);
         }
@@ -396,53 +328,22 @@ exports.createPurchaseReturn = async (req, res) => {
     }
 };
 
-// --- Dashboard Stats ---
-
 exports.getInventoryStats = async (req, res) => {
     try {
         const materials = await RawMaterial.findAll({ where: { tenantId: req.tenantId } });
         const lowStock = materials.filter(m => m.currentStock <= m.minStockLevel).length;
-
-        let totalValue = 0;
-        materials.forEach(m => {
-            totalValue += (m.currentStock * m.purchasePrice);
-        });
-
-        // Wastage Calculation (Last 30 days)
-        const last30Days = new Date();
-        last30Days.setDate(last30Days.getDate() - 30);
-
+        let totalValue = materials.reduce((sum, m) => sum + (m.currentStock * m.purchasePrice), 0);
+        const last30Days = new Date(); last30Days.setDate(last30Days.getDate() - 30);
         const wastages = await Wastage.findAll({
-            where: {
-                tenantId: req.tenantId,
-                date: { [Op.gte]: last30Days }
-            },
+            where: { tenantId: req.tenantId, date: { [Op.gte]: last30Days } },
             include: [{ model: WastageItem, include: [RawMaterial] }]
         });
-
-        // Calculate Wastage Value
         let totalWastageValue = 0;
-        wastages.forEach(w => {
-            w.WastageItems.forEach(wi => {
-                // If item has recorded cost use it, else use current raw material price
-                const price = wi.price || wi.RawMaterial?.purchasePrice || 0;
-                totalWastageValue += (wi.quantity * price);
-            });
-        });
-
-        // Margin Mock/Approximation
-        // In a real scenario, call the COGS service.
-        // For now, return a placeholder or simplified calc if possible, else 0.
-        // Let's default to a safe value to avoid "0%" shock if no data.
-        const marginGap = 0;
-
-        res.json({
-            totalItems: materials.length,
-            lowStockCount: lowStock,
-            totalStockValue: totalValue,
-            totalWastage: totalWastageValue.toFixed(2),
-            marginGap
-        });
+        wastages.forEach(w => w.WastageItems.forEach(wi => {
+            const price = wi.price || wi.RawMaterial?.purchasePrice || 0;
+            totalWastageValue += (wi.quantity * price);
+        }));
+        res.json({ totalItems: materials.length, lowStockCount: lowStock, totalStockValue: totalValue, totalWastage: totalWastageValue.toFixed(2), marginGap: 0 });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -450,37 +351,16 @@ exports.getInventoryStats = async (req, res) => {
 
 exports.getClosingStockReport = async (req, res) => {
     try {
-        const materials = await RawMaterial.findAll({
-            where: { tenantId: req.tenantId },
-            order: [['name', 'ASC']]
-        });
-
-        // Return current closing stock
-        const report = materials.map(m => ({
-            id: m.id,
-            name: m.name,
-            unit: m.unit,
-            closingStock: m.currentStock,
-            price: m.purchasePrice,
-            value: (m.currentStock * m.purchasePrice).toFixed(2)
-        }));
-
-        res.json(report);
+        const materials = await RawMaterial.findAll({ where: { tenantId: req.tenantId }, order: [['name', 'ASC']] });
+        res.json(materials.map(m => ({ id: m.id, name: m.name, unit: m.unit, closingStock: m.currentStock, price: m.purchasePrice, value: (m.currentStock * m.purchasePrice).toFixed(2) })));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
-// --- Wastage Management ---
 
 exports.getWastages = async (req, res) => {
     try {
-        const wastages = await Wastage.findAll({
-            where: { tenantId: req.tenantId },
-            include: [
-                { model: WastageItem, include: [RawMaterial, Item] }
-            ],
-            order: [['date', 'DESC']]
-        });
+        const wastages = await Wastage.findAll({ where: { tenantId: req.tenantId }, include: [{ model: WastageItem, include: [RawMaterial, Item] }], order: [['date', 'DESC']] });
         res.json(wastages);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -491,135 +371,108 @@ exports.createWastage = async (req, res) => {
     try {
         const { items, ...wastageData } = req.body;
         const wastage = await Wastage.create({ ...wastageData, tenantId: req.tenantId });
-
         if (items && items.length > 0) {
-            const itemPromises = items.map(async item => {
-                await WastageItem.create({
-                    ...item,
-                    wastageId: wastage.id
-                });
-
-                // Deduct from Stock (similar to Return/Consumption)
+            await Promise.all(items.map(async item => {
+                await WastageItem.create({ ...item, wastageId: wastage.id });
                 if (item.rawMaterialId) {
                     const material = await RawMaterial.findByPk(item.rawMaterialId);
-                    if (material) {
-                        await material.decrement('currentStock', { by: parseFloat(item.quantity) });
-                    }
+                    if (material) await material.decrement('currentStock', { by: parseFloat(item.quantity) });
                 }
-            });
-            await Promise.all(itemPromises);
+            }));
         }
-
-        const completeWastage = await Wastage.findByPk(wastage.id, {
-            include: [{ model: WastageItem }]
-        });
-        res.status(201).json(completeWastage);
+        res.status(201).json(await Wastage.findByPk(wastage.id, { include: [{ model: WastageItem }] }));
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 };
 
-// --- Report Aggregations ---
-
-// 1. Stock Summary Report (Daily Report)
+// --- STOCK SUMMARY REPORT (REWRITTEN FOR ROBUSTNESS) ---
 exports.getStockSummaryReport = async (req, res) => {
     try {
         const { fromDate, toDate } = req.query;
-
-        // Date filters
-        const dateFilter = {};
+        console.log(`[STOCK SUMMARY] Request received. Tenant: ${req.tenantId}, From: ${fromDate}, To: ${toDate}`);
+        const dateFilter = { tenantId: req.tenantId };
         if (fromDate && toDate) {
-            dateFilter.createdAt = { [Op.between]: [new Date(fromDate), new Date(toDate + 'T23:59:59')] };
+            dateFilter.createdAt = { [Op.between]: [getStartOfDayIST(fromDate), getEndOfDayIST(toDate)] };
         } else {
-            // Default to today if not specified, to handle "current" view logic
-            const end = new Date(); end.setHours(23, 59, 59, 999);
-            dateFilter.createdAt = { [Op.between]: [start, end] };
+            dateFilter.createdAt = { [Op.between]: [getStartOfDayIST(), getEndOfDayIST()] };
         }
-        // Tenant Filter
-        dateFilter.tenantId = req.tenantId;
 
-        const materials = await RawMaterial.findAll({ where: { tenantId: req.tenantId } });
+        logToFile(`[STOCK SUMMARY] Request for Tenant: ${req.tenantId}, From: ${fromDate}, To: ${toDate}`);
+        const [materials, purchases, recipes, orders] = await Promise.all([
+            RawMaterial.findAll({ where: { tenantId: req.tenantId } }),
+            PurchaseItem.findAll({ where: dateFilter, attributes: ['rawMaterialId', 'quantity'] }),
+            Recipe.findAll({
+                where: { tenantId: req.tenantId },
+                include: [{ model: RecipeIngredient }]
+            }),
+            Order.findAll({
+                where: dateFilter,
+                include: [{ model: OrderItem, as: 'items' }]
+            })
+        ]);
 
-        // 1. Calculate Purchases in Range
-        const purchases = await PurchaseItem.findAll({
-            where: dateFilter,
-            attributes: ['rawMaterialId', 'quantity']
-        });
+        logToFile(`[STOCK SUMMARY] Found ${materials.length} materials, ${purchases.length} purchases, ${orders.length} orders.`);
+
+        // 1. Build Purchase Map
         const purchaseMap = {};
-        purchases.forEach(p => {
-            purchaseMap[p.rawMaterialId] = (purchaseMap[p.rawMaterialId] || 0) + p.quantity;
+        purchases.forEach(p => { purchaseMap[p.rawMaterialId] = (purchaseMap[p.rawMaterialId] || 0) + p.quantity; });
+
+        // 2. Build Recipe Map (Key: itemId_variantId or itemId_null)
+        const recipeMap = {};
+        recipes.forEach(r => {
+            const key = `${r.itemId}_${r.variantId || 'null'}`;
+            recipeMap[key] = r;
         });
 
-        // 2. Calculate Consumption in Range
-        // We fetch Orders -> Items -> Recipe -> Ingredients
-        // Note: This is computationally heavy for large datasets. Optimization: "ConsumptionLog" table.
-        const orders = await Order.findAll({
-            where: { ...dateFilter, tenantId: req.tenantId },
-            include: [{
-                model: OrderItem,
-                as: 'items',
-                include: [{
-                    model: Item,
-                    include: [{
-                        model: Recipe,
-                        where: { isActive: true },
-                        required: false,
-                        include: [{ model: RecipeIngredient }]
-                    }]
-                }]
-            }]
-        });
-
+        // 3. Calculate Consumption
         const consumedMap = {};
+        console.log(`[STOCK SUMMARY] Calculating for ${orders.length} orders...`);
         orders.forEach(order => {
-            if (order.items) {
-                order.items.forEach(orderItem => {
-                    const item = orderItem.Item;
-                    const recipe = item?.Recipe;
+            const items = order.items || order.OrderItems || [];
+            items.forEach(orderItem => {
+                // Try to find recipe by Variant first, then Item
+                let recipe = recipeMap[`${orderItem.itemId}_${orderItem.variantId}`] ||
+                    recipeMap[`${orderItem.itemId}_null`];
 
-                    // Only count if recipe exists AND autoConsumption is ON
-                    // This matches the logic in OrderController.consumeStock
-                    if (recipe && recipe.RecipeIngredients && recipe.autoConsumption !== false) {
-                        recipe.RecipeIngredients.forEach(ing => {
-                            const totalQty = (ing.quantity / (recipe.yieldQty || 1)) * orderItem.quantity;
-                            consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + totalQty;
-                        });
-                    }
-                });
-            }
+                if (recipe && recipe.autoConsumption !== false) {
+                    const ingredients = recipe.RecipeIngredients || [];
+                    const yieldQty = recipe.yieldQty || 1;
+                    ingredients.forEach(ing => {
+                        const consumption = (ing.quantity / yieldQty) * orderItem.quantity;
+                        consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + consumption;
+                        console.log(`[STOCK SUMMARY]   + ${order.orderNumber} matched! Mat ${ing.rawMaterialId} + ${consumption}`);
+                    });
+                }
+            });
         });
 
-        // 3. Build Report
-        const report = materials.map(m => {
+        const today = getTodayIST();
+        const report = await Promise.all(materials.map(async (m) => {
             const purchaseQty = purchaseMap[m.id] || 0;
             const consumedQty = consumedMap[m.id] || 0;
-            const currentStock = m.currentStock; // This is the state at END of period (approximately)
+            const currentStock = m.currentStock;
 
-            // Back-calculate Opening
-            // Closing = Opening + Purchase - Consumed
-            // => Opening = Closing - Purchase + Consumed
-            const openingStock = currentStock - purchaseQty + consumedQty;
+            let openingStock = m.openingStock || 0;
+            if (!m.lastStockUpdateDate || m.lastStockUpdateDate !== today) {
+                openingStock = currentStock - purchaseQty + consumedQty;
+                await m.update({ openingStock, lastStockUpdateDate: today });
+            }
 
             return {
-                id: m.id,
-                name: m.name,
-                unit: m.consumptionUnit,
-                opening: openingStock,
+                id: m.id, name: m.name, unit: m.consumptionUnit,
+                opening: Math.max(0, openingStock),
                 purchase: purchaseQty,
-                excess: 0,
-                totalInput: openingStock + purchaseQty,
+                totalInput: Math.max(0, openingStock) + purchaseQty,
                 consumed: consumedQty,
-                wastage: 0,
-                normalLoss: 0,
-                transfer: 0,
-                shortage: 0,
-                conversion: 0,
-                totalOutput: consumedQty, // + wastage etc
-                closingStock: currentStock, // Actual
+                totalOutput: consumedQty,
+                closingStock: currentStock,
                 closingSummary: currentStock,
-                difference: 0
+                difference: Math.abs(currentStock - (openingStock + purchaseQty - consumedQty)) > 0.01
+                    ? (currentStock - (openingStock + purchaseQty - consumedQty))
+                    : 0
             };
-        });
+        }));
 
         res.json(report);
     } catch (error) {
@@ -628,130 +481,75 @@ exports.getStockSummaryReport = async (req, res) => {
     }
 };
 
-// 2. Orderwise Consumption Report
 exports.getOrderWiseConsumptionReport = async (req, res) => {
     try {
-        // Fetch Orders with Items
         const orders = await Order.findAll({
             where: { tenantId: req.tenantId },
-            include: [
-                {
-                    model: OrderItem,
-                    include: [
-                        {
-                            model: Item,
-                            include: [
-                                {
-                                    model: Recipe,
-                                    include: [{ model: RecipeIngredient, include: [RawMaterial] }]
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
+            include: [{ model: OrderItem, as: 'items' }],
             order: [['createdAt', 'DESC']],
-            limit: 5 // Limit for performance in this view
+            limit: 50
         });
+        const recipes = await Recipe.findAll({ where: { tenantId: req.tenantId }, include: [{ model: RecipeIngredient, include: [RawMaterial] }] });
+        const recipeMap = {};
+        recipes.forEach(r => { recipeMap[`${r.itemId}_${r.variantId || 'null'}`] = r; });
 
         const reportOrders = orders.map(order => {
             let totalCost = 0;
-            const items = order.OrderItems.map(orderItem => {
-                const item = orderItem.Item;
-                const recipe = item?.Recipes?.[0]; // Assuming 1 recipe per item for now
-
-                const ingredients = recipe ? recipe.RecipeIngredients.map(ri => {
+            const items = (order.items || []).map(orderItem => {
+                let recipe = recipeMap[`${orderItem.itemId}_${orderItem.variantId}`] || recipeMap[`${orderItem.itemId}_null`];
+                const ingredients = recipe ? (recipe.RecipeIngredients || []).map(ri => {
                     const cost = ri.quantity * (ri.RawMaterial?.purchasePrice || 0) * orderItem.quantity;
                     totalCost += cost;
-                    return {
-                        name: ri.RawMaterial?.name,
-                        qty: `${ri.quantity * orderItem.quantity} ${ri.unit}`,
-                        cost: cost
-                    };
+                    return { name: ri.RawMaterial?.name, qty: `${ri.quantity * orderItem.quantity} ${ri.unit}`, cost };
                 }) : [];
-
-                return {
-                    name: item.name,
-                    qty: orderItem.quantity,
-                    price: orderItem.price * orderItem.quantity,
-                    ingredients
-                };
+                return { name: orderItem.itemName, qty: orderItem.quantity, price: orderItem.price * orderItem.quantity, ingredients };
             });
-
-            const profit = order.totalAmount - totalCost;
-            const profitPercent = order.totalAmount > 0 ? (profit / order.totalAmount) * 100 : 0;
-
-            return {
-                orderNo: order.orderNumber,
-                date: order.createdAt,
-                totalPrice: order.totalAmount,
-                profitPercent: profitPercent.toFixed(2),
-                cogs: totalCost,
-                items
-            };
+            return { orderNo: order.orderNumber, date: order.createdAt, totalPrice: order.totalAmount, profitPercent: order.totalAmount > 0 ? (((order.totalAmount - totalCost) / order.totalAmount) * 100).toFixed(2) : 0, cogs: totalCost, items };
         });
 
-        // Summary Stats
-        const totalSales = reportOrders.reduce((Acc, o) => Acc + o.totalPrice, 0);
-        const totalCOGS = reportOrders.reduce((Acc, o) => Acc + o.cogs, 0);
-
-        res.json({
-            summary: {
-                totalSales,
-                totalCost: totalCOGS,
-                profitPercent: totalSales > 0 ? ((totalSales - totalCOGS) / totalSales) * 100 : 0
-            },
-            orders: reportOrders
-        });
-
+        res.json({ orders: reportOrders, summary: { totalSales: reportOrders.reduce((Acc, o) => Acc + o.totalPrice, 0), totalCost: reportOrders.reduce((Acc, o) => Acc + o.cogs, 0) } });
     } catch (error) {
-        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
 
-// 3. Consumption Summary Report
 exports.getConsumptionSummaryReport = async (req, res) => {
     try {
-        // Aggregate all consumption from Orders -> OrderItems -> Recipes -> Ingredients
         const materials = await RawMaterial.findAll({ where: { tenantId: req.tenantId } });
-
-        // In a real optimized query, we would use Sequelize.fn('SUM') with joins.
-        // For MVP, we pass basic material info and would calculate usage on the fly or via a separate 'ConsumptionLog' table.
-        // We will return materials with their current purchase price for the report grid.
-
-        const report = materials.map(m => ({
-            id: m.id,
-            name: m.name,
-            unit: m.consumptionUnit,
-            date: new Date(),
-            consumption: 0, // Needs aggregation
-            price: m.purchasePrice,
-            cost: 0
-        }));
-
-        res.json(report);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+        res.json(materials.map(m => ({ id: m.id, name: m.name, unit: m.consumptionUnit, date: new Date(), consumption: 0, price: m.purchasePrice, cost: 0 })));
+    } catch (error) { res.status(500).json({ error: error.message }); }
 };
+
 exports.updateClosingStock = async (req, res) => {
     try {
         const { updates } = req.body;
+        for (const update of updates) {
+            const material = await RawMaterial.findOne({ where: { id: update.id, tenantId: req.tenantId } });
+            if (material) await material.update({ currentStock: update.closingSummary });
+        }
+        res.json({ message: 'Closing stock updated' });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+};
+exports.getStockHistoryReport = async (req, res) => {
+    try {
+        const { fromDate, toDate, rawMaterialId } = req.query;
+        const where = { tenantId: req.tenantId };
 
-        if (!updates || !Array.isArray(updates)) {
-            return res.status(400).json({ error: 'Invalid updates format' });
+        if (fromDate && toDate) {
+            where.createdAt = { [Op.between]: [getStartOfDayIST(fromDate), getEndOfDayIST(toDate)] };
         }
 
-        const promises = updates.map(async (update) => {
-            const material = await RawMaterial.findOne({ where: { id: update.id, tenantId: req.tenantId } });
-            if (material) {
-                await material.update({ currentStock: update.closingStock });
-            }
+        if (rawMaterialId) {
+            where.rawMaterialId = rawMaterialId;
+        }
+
+        const transactions = await StockTransaction.findAll({
+            where,
+            include: [{ model: RawMaterial, attributes: ['name', 'consumptionUnit'] }],
+            order: [['createdAt', 'DESC']]
         });
 
-        await Promise.all(promises);
-        res.json({ message: 'Closing stock updated successfully', count: updates.length });
+        res.json(transactions);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -315,16 +315,23 @@ exports.deleteUser = async (req, res) => {
 
 exports.syncUsers = async (req, res) => {
     try {
-        if (!req.user.tenantId) {
+        console.log('[SYNC USERS] Request from user:', req.user?.username, 'tenantId:', req.user?.tenantId);
+
+        if (!req.user || !req.user.tenantId) {
+            console.error('[SYNC USERS] Missing tenant ID');
             return res.status(400).json({ error: 'Tenant ID required for sync' });
         }
+
         const users = await User.findAll({
             where: { tenantId: req.user.tenantId },
-            attributes: ['id', 'username', 'displayName', 'role', 'password', 'passcode', 'tenantId', 'roleId'],
+            attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
             include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
         });
+
+        console.log('[SYNC USERS] Returning', users.length, 'users for tenant', req.user.tenantId);
         res.json(users);
     } catch (error) {
+        console.error('[SYNC USERS ERROR]', error);
         res.status(500).json({ error: error.message });
     }
 };

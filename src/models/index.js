@@ -55,6 +55,9 @@ OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 Item.hasMany(OrderItem, { foreignKey: 'itemId' });
 OrderItem.belongsTo(Item, { foreignKey: 'itemId' });
 
+Variant.hasMany(OrderItem, { foreignKey: 'variantId' });
+OrderItem.belongsTo(Variant, { foreignKey: 'variantId' });
+
 // Groups Relationships
 AddonGroup.hasMany(Addon, { foreignKey: 'addonGroupId' });
 Addon.belongsTo(AddonGroup, { foreignKey: 'addonGroupId' });
@@ -70,10 +73,10 @@ Item.belongsToMany(VariationGroup, { through: ItemVariationGroup, foreignKey: 'i
 VariationGroup.belongsToMany(Item, { through: ItemVariationGroup, foreignKey: 'variationGroupId', as: 'items' });
 
 // Inventory / Recipe Relationships
-Item.hasOne(Recipe, { foreignKey: 'itemId' });
+Item.hasOne(Recipe, { foreignKey: 'itemId', as: 'recipe' });
 Recipe.belongsTo(Item, { foreignKey: 'itemId' });
 
-Variant.hasOne(Recipe, { foreignKey: 'variantId' });
+Variant.hasOne(Recipe, { foreignKey: 'variantId', as: 'recipe' });
 Recipe.belongsTo(Variant, { foreignKey: 'variantId' });
 
 Recipe.hasMany(RecipeIngredient, { foreignKey: 'recipeId' });

@@ -15,6 +15,10 @@ const OrderItem = sequelize.define('OrderItem', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
+    variantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     itemName: { // Snapshot in case item changes
         type: DataTypes.STRING,
         allowNull: false

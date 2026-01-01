@@ -254,6 +254,118 @@ async function seed() {
             tenantId
         });
 
+        // Additional Raw Materials for comprehensive testing
+        const lettuce = await RawMaterial.create({
+            name: 'Lettuce',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 25.00,
+            currentStock: 8,
+            minStockLevel: 2,
+            tenantId
+        });
+
+        const onion = await RawMaterial.create({
+            name: 'Onion',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 30.00,
+            currentStock: 12,
+            minStockLevel: 3,
+            tenantId
+        });
+
+        const mayo = await RawMaterial.create({
+            name: 'Mayonnaise',
+            purchaseUnit: 'Liter',
+            consumptionUnit: 'Ml',
+            conversionFactor: 1000,
+            purchasePrice: 120.00,
+            currentStock: 5,
+            minStockLevel: 1,
+            tenantId
+        });
+
+        const oil = await RawMaterial.create({
+            name: 'Cooking Oil',
+            purchaseUnit: 'Liter',
+            consumptionUnit: 'Ml',
+            conversionFactor: 1000,
+            purchasePrice: 150.00,
+            currentStock: 20,
+            minStockLevel: 5,
+            tenantId
+        });
+
+        const basil = await RawMaterial.create({
+            name: 'Fresh Basil',
+            purchaseUnit: 'Bunch',
+            consumptionUnit: 'Gram',
+            conversionFactor: 50, // 50g per bunch
+            purchasePrice: 15.00,
+            currentStock: 10,
+            minStockLevel: 3,
+            tenantId
+        });
+
+        const oliveOil = await RawMaterial.create({
+            name: 'Olive Oil',
+            purchaseUnit: 'Liter',
+            consumptionUnit: 'Ml',
+            conversionFactor: 1000,
+            purchasePrice: 450.00,
+            currentStock: 3,
+            minStockLevel: 1,
+            tenantId
+        });
+
+        const pizzaSauce = await RawMaterial.create({
+            name: 'Pizza Sauce',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 80.00,
+            currentStock: 10,
+            minStockLevel: 3,
+            tenantId
+        });
+
+        const pepperoni = await RawMaterial.create({
+            name: 'Pepperoni',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 280.00,
+            currentStock: 5,
+            minStockLevel: 2,
+            tenantId
+        });
+
+        const mushroom = await RawMaterial.create({
+            name: 'Button Mushrooms',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 80.00,
+            currentStock: 4,
+            minStockLevel: 1,
+            tenantId
+        });
+
+        const bellPepper = await RawMaterial.create({
+            name: 'Bell Pepper',
+            purchaseUnit: 'Kg',
+            consumptionUnit: 'Gram',
+            conversionFactor: 1000,
+            purchasePrice: 60.00,
+            currentStock: 6,
+            minStockLevel: 2,
+            tenantId
+        });
+
+
         // 4. Categories
         console.log('Seeding Categories...');
         const catBurgers = await Category.create({ name: 'Burgers', icon: 'burger', tenantId });
@@ -287,11 +399,14 @@ async function seed() {
             tenantId
         });
 
-        // Recipe for Burger
+        // Recipe for Burger (Enhanced with more ingredients)
         const burgerRecipe = await Recipe.create({ itemId: burger.id, tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: bun.id, quantity: 1, unit: 'Pieces', tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: chickenPatty.id, quantity: 1, unit: 'Pieces', tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: cheese.id, quantity: 1, unit: 'Slice', tenantId });
+        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: lettuce.id, quantity: 20, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: onion.id, quantity: 15, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: mayo.id, quantity: 10, unit: 'Ml', tenantId });
 
 
         // -- Margherita Pizza
@@ -305,6 +420,15 @@ async function seed() {
             tenantId
         });
 
+        // Recipe for Margherita Pizza
+        const pizzaRecipe = await Recipe.create({ itemId: pizza.id, tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: basil.id, quantity: 5, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
+        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: tomato.id, quantity: 50, unit: 'Gram', tenantId });
+
         // Variations for Pizza
         await ItemVariationGroup.create({ itemId: pizza.id, variationGroupId: sizeGroup.id, tenantId });
         await Variant.create({ name: 'Regular', price: 250, variationGroupId: sizeGroup.id, itemId: pizza.id, tenantId });
@@ -313,6 +437,59 @@ async function seed() {
 
         // Addons for Pizza
         await ItemAddonGroup.create({ itemId: pizza.id, addonGroupId: toppingsGroup.id, tenantId });
+
+        // -- Pepperoni Pizza (New Item)
+        const pepperoniPizza = await Item.create({
+            name: 'Pepperoni Pizza',
+            price: 350,
+            description: 'Delicious pizza loaded with pepperoni.',
+            shortCode: 'PP01',
+            categoryId: catPizza.id,
+            type: 'non-veg',
+            tenantId
+        });
+
+        const pepperoniPizzaRecipe = await Recipe.create({ itemId: pepperoniPizza.id, tenantId });
+        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: pepperoni.id, quantity: 100, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
+
+        await ItemVariationGroup.create({ itemId: pepperoniPizza.id, variationGroupId: sizeGroup.id, tenantId });
+        await Variant.create({ name: 'Regular', price: 350, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
+        await Variant.create({ name: 'Medium', price: 450, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
+        await Variant.create({ name: 'Large', price: 590, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
+
+        await ItemAddonGroup.create({ itemId: pepperoniPizza.id, addonGroupId: toppingsGroup.id, tenantId });
+
+        // -- Veggie Supreme Pizza (New Item)
+        const veggiePizza = await Item.create({
+            name: 'Veggie Supreme Pizza',
+            price: 300,
+            description: 'Loaded with fresh vegetables.',
+            shortCode: 'VP01',
+            categoryId: catPizza.id,
+            type: 'veg',
+            tenantId
+        });
+
+        const veggiePizzaRecipe = await Recipe.create({ itemId: veggiePizza.id, tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: mushroom.id, quantity: 50, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: bellPepper.id, quantity: 40, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: onion.id, quantity: 30, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: tomato.id, quantity: 30, unit: 'Gram', tenantId });
+        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
+
+        await ItemVariationGroup.create({ itemId: veggiePizza.id, variationGroupId: sizeGroup.id, tenantId });
+        await Variant.create({ name: 'Regular', price: 300, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
+        await Variant.create({ name: 'Medium', price: 400, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
+        await Variant.create({ name: 'Large', price: 540, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
+
+        await ItemAddonGroup.create({ itemId: veggiePizza.id, addonGroupId: toppingsGroup.id, tenantId });
 
         // -- Coke
         await Item.create({

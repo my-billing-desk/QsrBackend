@@ -40,6 +40,7 @@ router.get('/reports/closing-stock', protect, authorize(...managers), InventoryC
 router.get('/reports/stock-summary', protect, authorize(...managers), InventoryController.getStockSummaryReport); // New Endpoint
 router.get('/reports/order-consumption', protect, authorize(...managers), InventoryController.getOrderWiseConsumptionReport); // New Endpoint
 router.get('/reports/consumption-summary', protect, authorize(...managers), InventoryController.getConsumptionSummaryReport); // New Endpoint
+router.get('/reports/stock-history', protect, authorize(...managers), InventoryController.getStockHistoryReport); // New Endpoint
 
 // Wastage
 router.get('/wastage', protect, authorize(...managers), InventoryController.getWastages);

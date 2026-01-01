@@ -1,12 +1,13 @@
 const { Op } = require('sequelize');
 const { Order, Purchase, sequelize } = require('../models');
+const { getStartOfDayIST, getEndOfDayIST } = require('../utils/dateUtils');
 
 exports.getProfitLoss = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
-        // Default to last 6 months if not provided
-        const end = endDate ? new Date(endDate) : new Date();
-        const start = startDate ? new Date(startDate) : new Date(new Date().setMonth(end.getMonth() - 5));
+        // Boundaries
+        const end = getEndOfDayIST(endDate);
+        const start = startDate ? getStartOfDayIST(startDate) : new Date(new Date(end).setMonth(end.getMonth() - 5));
 
         // 1. Fetch Revenue (Orders) broken down by Source and Type
         // Group by Month, Source, Type
