@@ -36,9 +36,9 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
         type: DataTypes.TEXT,
         allowNull: true
     }
-,
+    ,
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });

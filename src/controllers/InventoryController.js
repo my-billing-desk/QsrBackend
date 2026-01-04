@@ -190,22 +190,42 @@ exports.getPurchases = async (req, res) => {
 };
 
 exports.createPurchase = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
         const { items, ...purchaseData } = req.body;
-        const purchase = await Purchase.create({ ...purchaseData, tenantId: req.tenantId });
+
+        const calculatedTotal = (items.reduce((sum, item) => {
+            const qty = parseFloat(item.quantity) || 0;
+            const price = parseFloat(item.price) || 0;
+            const discount = parseFloat(item.discount) || 0;
+            const taxAmount = ((qty * price - discount) * (parseFloat(item.tax) || 0)) / 100;
+            return sum + (qty * price) - discount + taxAmount;
+        }, 0) + (parseFloat(purchaseData.otherCharges) || 0) + (parseFloat(purchaseData.deliveryCharges) || 0) + (parseFloat(purchaseData.totalIgst) || 0) - (parseFloat(purchaseData.discount) || 0)).toFixed(2);
+
+        const purchase = await Purchase.create({
+            ...purchaseData,
+            grandTotal: purchaseData.grandTotal || calculatedTotal,
+            tenantId: req.tenantId
+        }, { transaction: t });
+
         if (items && items.length > 0) {
-            const itemPromises = items.map(async item => {
-                await PurchaseItem.create({ ...item, purchaseId: purchase.id, tenantId: req.tenantId });
-                const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId);
+            for (const item of items) {
+                await PurchaseItem.create({
+                    ...item,
+                    taxPercent: item.tax || 0,
+                    purchaseId: purchase.id,
+                    tenantId: req.tenantId
+                }, { transaction: t });
+
+                const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId, { transaction: t });
                 if (rawMaterial) {
-                    const oldStock = rawMaterial.currentStock;
+                    const oldStock = rawMaterial.currentStock || 0;
                     const newStock = oldStock + parseFloat(item.quantity);
                     await rawMaterial.update({
                         currentStock: newStock,
                         purchasePrice: item.price > 0 ? item.price : rawMaterial.purchasePrice
-                    });
+                    }, { transaction: t });
 
-                    // Add Stock Transaction
                     await StockTransaction.create({
                         type: 'purchase',
                         rawMaterialId: rawMaterial.id,
@@ -214,15 +234,152 @@ exports.createPurchase = async (req, res) => {
                         purchaseId: purchase.id,
                         tenantId: req.tenantId,
                         notes: `Purchase Inward - Inv: ${purchase.invoiceNumber}`
-                    });
+                    }, { transaction: t });
                 }
-            });
-            await Promise.all(itemPromises);
+            }
         }
-        const completePurchase = await Purchase.findByPk(purchase.id, { include: [{ model: PurchaseItem }] });
-        res.status(201).json(completePurchase);
+        await t.commit();
+        res.status(201).json(purchase);
     } catch (error) {
+        if (!t.finished) await t.rollback();
         res.status(400).json({ error: error.message });
+    }
+};
+
+exports.updatePurchase = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const { items, ...purchaseData } = req.body;
+
+        const purchase = await Purchase.findOne({
+            where: { id, tenantId: req.tenantId },
+            include: [{ model: PurchaseItem }]
+        });
+
+        if (!purchase) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Purchase record not found' });
+        }
+
+        // 1. Reverse old stock impacts
+        for (const oldItem of purchase.PurchaseItems) {
+            const mat = await RawMaterial.findByPk(oldItem.rawMaterialId, { transaction: t });
+            if (mat) {
+                const revertedStock = (mat.currentStock || 0) - (parseFloat(oldItem.quantity) || 0);
+                await mat.update({ currentStock: revertedStock }, { transaction: t });
+
+                await StockTransaction.create({
+                    type: 'adjustment',
+                    rawMaterialId: mat.id,
+                    quantityChange: -(parseFloat(oldItem.quantity) || 0),
+                    currentStock: revertedStock,
+                    tenantId: req.tenantId,
+                    notes: `Stock Reversal for Purchase Edit: ${purchase.invoiceNumber}`
+                }, { transaction: t });
+            }
+        }
+
+        // 2. Delete old items
+        await PurchaseItem.destroy({ where: { purchaseId: id }, transaction: t });
+
+        // 3. Update purchase header
+        const calculatedTotal = (items.reduce((sum, item) => {
+            const qty = parseFloat(item.quantity) || 0;
+            const price = parseFloat(item.price) || 0;
+            const discount = parseFloat(item.discount) || 0;
+            const taxAmount = ((qty * price - discount) * (parseFloat(item.tax) || 0)) / 100;
+            return sum + (qty * price) - discount + taxAmount;
+        }, 0) + (parseFloat(purchaseData.otherCharges) || 0) + (parseFloat(purchaseData.deliveryCharges) || 0) + (parseFloat(purchaseData.totalIgst) || 0) - (parseFloat(purchaseData.discount) || 0)).toFixed(2);
+
+        await purchase.update({
+            ...purchaseData,
+            grandTotal: purchaseData.grandTotal || calculatedTotal
+        }, { transaction: t });
+
+        // 4. Create new items and apply new stock
+        if (items && items.length > 0) {
+            for (const item of items) {
+                await PurchaseItem.create({
+                    ...item,
+                    taxPercent: item.tax || 0,
+                    purchaseId: id,
+                    tenantId: req.tenantId
+                }, { transaction: t });
+
+                const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId, { transaction: t });
+                if (rawMaterial) {
+                    const oldStock = rawMaterial.currentStock || 0;
+                    const newStock = oldStock + parseFloat(item.quantity);
+                    await rawMaterial.update({
+                        currentStock: newStock,
+                        purchasePrice: item.price > 0 ? item.price : rawMaterial.purchasePrice
+                    }, { transaction: t });
+
+                    await StockTransaction.create({
+                        type: 'purchase',
+                        rawMaterialId: rawMaterial.id,
+                        quantityChange: parseFloat(item.quantity),
+                        currentStock: newStock,
+                        purchaseId: id,
+                        tenantId: req.tenantId,
+                        notes: `Purchase Update - Inv: ${purchase.invoiceNumber}`
+                    }, { transaction: t });
+                }
+            }
+        }
+
+        await t.commit();
+        res.json({ message: 'Purchase updated successfully', purchase });
+    } catch (error) {
+        if (!t.finished) await t.rollback();
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.deletePurchase = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const purchase = await Purchase.findOne({
+            where: { id, tenantId: req.tenantId },
+            include: [{ model: PurchaseItem }]
+        });
+
+        if (!purchase) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Purchase not found' });
+        }
+
+        // Reverse stock impacts
+        if (purchase.PurchaseItems) {
+            for (const item of purchase.PurchaseItems) {
+                const mat = await RawMaterial.findByPk(item.rawMaterialId, { transaction: t });
+                if (mat) {
+                    const oldStock = mat.currentStock || 0;
+                    const newStock = oldStock - (parseFloat(item.quantity) || 0);
+                    await mat.update({ currentStock: newStock }, { transaction: t });
+
+                    await StockTransaction.create({
+                        type: 'adjustment',
+                        rawMaterialId: mat.id,
+                        quantityChange: -(parseFloat(item.quantity) || 0),
+                        currentStock: newStock,
+                        tenantId: req.tenantId,
+                        notes: `Purchase Deleted - Reversal: ${purchase.invoiceNumber}`
+                    }, { transaction: t });
+                }
+            }
+        }
+
+        await PurchaseItem.destroy({ where: { purchaseId: id }, transaction: t });
+        await purchase.destroy({ transaction: t });
+
+        await t.commit();
+        res.json({ message: 'Purchase deleted successfully' });
+    } catch (error) {
+        if (!t.finished) await t.rollback();
+        res.status(500).json({ error: error.message });
     }
 };
 
@@ -243,40 +400,118 @@ exports.receivePurchaseOrder = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { items, invoiceNumber, invoiceDate } = req.body;
+        const {
+            items, invoiceNumber, invoiceDate, paymentStatus, paidAmount,
+            deliveryDate, deliveryTime, otherCharges, totalDiscount, otherTaxes, notes,
+            paymentType, transactionNumber, deliveryCharges
+        } = req.body;
+
         const po = await PurchaseOrder.findOne({ where: { id, tenantId: req.tenantId } });
         if (!po || po.status === 'Received') {
             await t.rollback();
             return res.status(po ? 400 : 404).json({ error: po ? 'PO already received' : 'Purchase Order not found' });
         }
-        await po.update({ status: 'Received', deliveryDate: new Date() }, { transaction: t });
+
+        const calculatedSubTotal = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const grandTotal = calculatedSubTotal - (parseFloat(totalDiscount) || 0) + (parseFloat(otherCharges) || 0) + (parseFloat(otherTaxes) || 0) + (parseFloat(deliveryCharges) || 0);
+
+        await po.update({
+            status: 'Received',
+            deliveryDate: deliveryDate || new Date(),
+            deliveryTime: deliveryTime || '12:00'
+        }, { transaction: t });
+
         const purchase = await Purchase.create({
             supplierId: po.supplierId,
-            invoiceNumber: invoiceNumber || `PO-${po.poNumber}`,
+            invoiceNumber: invoiceNumber || po.poNumber,
             invoiceDate: invoiceDate || new Date(),
-            totalAmount: items.reduce((sum, item) => sum + (item.quantity * item.price), 0),
+            poNumber: po.poNumber,
+            subTotal: calculatedSubTotal,
+            discount: totalDiscount || 0,
+            otherCharges: otherCharges || 0,
+            deliveryCharges: deliveryCharges || 0,
+            grandTotal: grandTotal,
+            paymentStatus: paymentStatus || 'Unpaid',
             status: 'Completed',
+            paymentType: paymentType || 'Cash',
+            transactionNumber: transactionNumber || '',
+            notes: notes || '',
             tenantId: req.tenantId
         }, { transaction: t });
+
         if (items && items.length > 0) {
             for (const item of items) {
-                await PurchaseOrderItem.update(
-                    { quantityReceived: item.quantity, price: item.price, amount: item.quantity * item.price },
-                    { where: { purchaseOrderId: id, rawMaterialId: item.rawMaterialId }, transaction: t }
-                );
                 await PurchaseItem.create({
-                    purchaseId: purchase.id, rawMaterialId: item.rawMaterialId,
-                    quantity: item.quantity, unit: item.unit, price: item.price, amount: item.quantity * item.price
+                    purchaseId: purchase.id,
+                    rawMaterialId: item.rawMaterialId,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    price: item.price,
+                    amount: item.amount,
+                    taxPercent: item.tax || 0,
+                    tenantId: req.tenantId
                 }, { transaction: t });
+
+                // Update Material Stock
                 const material = await RawMaterial.findByPk(item.rawMaterialId);
                 if (material) {
-                    await material.increment('currentStock', { by: parseFloat(item.quantity), transaction: t });
-                    await material.update({ purchasePrice: item.price }, { transaction: t });
+                    const oldStock = material.currentStock || 0;
+                    const newStock = oldStock + parseFloat(item.quantity);
+
+                    await material.update({
+                        currentStock: newStock,
+                        purchasePrice: item.price
+                    }, { transaction: t });
+
+                    // Log History
+                    await StockTransaction.create({
+                        type: 'purchase',
+                        rawMaterialId: material.id,
+                        quantityChange: parseFloat(item.quantity),
+                        currentStock: newStock,
+                        purchaseId: purchase.id,
+                        tenantId: req.tenantId,
+                        notes: `PO Received: ${po.poNumber}`
+                    }, { transaction: t });
                 }
             }
         }
+
         await t.commit();
-        res.json({ message: 'PO Received and Stock Updated', purchase });
+        res.json({ message: 'Purchase Order successfully received and stock updated', purchase });
+    } catch (error) {
+        if (!t.finished) await t.rollback();
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.updatePurchaseOrder = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const { items, ...poData } = req.body;
+
+        const po = await PurchaseOrder.findOne({ where: { id, tenantId: req.tenantId } });
+        if (!po) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Purchase Order not found' });
+        }
+
+        await po.update(poData, { transaction: t });
+
+        if (items) {
+            await PurchaseOrderItem.destroy({ where: { purchaseOrderId: id }, transaction: t });
+            for (const item of items) {
+                await PurchaseOrderItem.create({
+                    ...item,
+                    purchaseOrderId: id,
+                    tenantId: req.tenantId
+                }, { transaction: t });
+            }
+        }
+
+        await t.commit();
+        res.json({ message: 'Purchase Order updated successfully' });
     } catch (error) {
         if (!t.finished) await t.rollback();
         res.status(500).json({ error: error.message });
@@ -286,9 +521,16 @@ exports.receivePurchaseOrder = async (req, res) => {
 exports.createPurchaseOrder = async (req, res) => {
     try {
         const { items, ...poData } = req.body;
+
+        // Auto-generate PO Number if not provided
+        if (!poData.poNumber) {
+            const count = await PurchaseOrder.count({ where: { tenantId: req.tenantId } });
+            poData.poNumber = `PO${(count + 1).toString().padStart(6, '0')}`;
+        }
+
         const po = await PurchaseOrder.create({ ...poData, tenantId: req.tenantId });
         if (items && items.length > 0) {
-            const itemPromises = items.map(item => PurchaseOrderItem.create({ ...item, purchaseOrderId: po.id }));
+            const itemPromises = items.map(item => PurchaseOrderItem.create({ ...item, purchaseOrderId: po.id, tenantId: req.tenantId }));
             await Promise.all(itemPromises);
         }
         res.status(201).json(po);
@@ -311,39 +553,89 @@ exports.getPurchaseReturns = async (req, res) => {
 };
 
 exports.createPurchaseReturn = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
         const { items, ...prData } = req.body;
-        const pr = await PurchaseReturn.create({ ...prData, tenantId: req.tenantId });
+        const pr = await PurchaseReturn.create({ ...prData, tenantId: req.tenantId }, { transaction: t });
         if (items && items.length > 0) {
-            const itemPromises = items.map(async item => {
-                await PurchaseReturnItem.create({ ...item, purchaseReturnId: pr.id });
+            for (const item of items) {
+                await PurchaseReturnItem.create({ ...item, purchaseReturnId: pr.id, tenantId: req.tenantId }, { transaction: t });
                 const rawMaterial = await RawMaterial.findByPk(item.rawMaterialId);
-                if (rawMaterial) await rawMaterial.decrement('currentStock', { by: parseFloat(item.quantity) });
-            });
-            await Promise.all(itemPromises);
+                if (rawMaterial) {
+                    const oldStock = rawMaterial.currentStock;
+                    const newStock = Math.max(0, oldStock - parseFloat(item.quantity));
+
+                    await rawMaterial.update({ currentStock: newStock }, { transaction: t });
+
+                    // Log History
+                    await StockTransaction.create({
+                        type: 'return',
+                        rawMaterialId: rawMaterial.id,
+                        quantityChange: -parseFloat(item.quantity),
+                        currentStock: newStock,
+                        tenantId: req.tenantId,
+                        notes: `Purchase Return: ${pr.debitNoteNumber}`
+                    }, { transaction: t });
+                }
+            }
         }
+        await t.commit();
         res.status(201).json(pr);
     } catch (error) {
+        if (!t.finished) await t.rollback();
         res.status(400).json({ error: error.message });
     }
 };
 
 exports.getInventoryStats = async (req, res) => {
     try {
-        const materials = await RawMaterial.findAll({ where: { tenantId: req.tenantId } });
+        const materials = await RawMaterial.findAll({
+            where: { tenantId: req.tenantId },
+            order: [['currentStock', 'DESC']]
+        });
+
         const lowStock = materials.filter(m => m.currentStock <= m.minStockLevel).length;
-        let totalValue = materials.reduce((sum, m) => sum + (m.currentStock * m.purchasePrice), 0);
+        let totalValue = materials.reduce((sum, m) => sum + ((parseFloat(m.currentStock) || 0) * (parseFloat(m.purchasePrice) || 0)), 0);
+
         const last30Days = new Date(); last30Days.setDate(last30Days.getDate() - 30);
         const wastages = await Wastage.findAll({
             where: { tenantId: req.tenantId, date: { [Op.gte]: last30Days } },
             include: [{ model: WastageItem, include: [RawMaterial] }]
         });
+
         let totalWastageValue = 0;
         wastages.forEach(w => w.WastageItems.forEach(wi => {
             const price = wi.price || wi.RawMaterial?.purchasePrice || 0;
-            totalWastageValue += (wi.quantity * price);
+            totalWastageValue += ((parseFloat(wi.quantity) || 0) * (parseFloat(price) || 0));
         }));
-        res.json({ totalItems: materials.length, lowStockCount: lowStock, totalStockValue: totalValue, totalWastage: totalWastageValue.toFixed(2), marginGap: 0 });
+
+        const pendingOrdersCount = await PurchaseOrder.count({
+            where: { tenantId: req.tenantId, status: 'Pending' }
+        });
+
+        const recentTransactions = await StockTransaction.findAll({
+            where: { tenantId: req.tenantId },
+            include: [{ model: RawMaterial, attributes: ['name'] }],
+            order: [['createdAt', 'DESC']],
+            limit: 5
+        });
+
+        res.json({
+            totalItems: materials.length,
+            lowStockCount: lowStock,
+            totalStockValue: totalValue.toFixed(2),
+            totalWastage: totalWastageValue.toFixed(2),
+            pendingOrders: pendingOrdersCount,
+            recentActivity: recentTransactions.map(t => ({
+                id: t.id,
+                name: t.RawMaterial?.name || 'Unknown Item',
+                type: t.type.charAt(0).toUpperCase() + t.type.slice(1),
+                qty: `${t.quantityChange > 0 ? '+' : ''}${t.quantityChange}`,
+                time: t.createdAt,
+                notes: t.notes
+            })),
+            marginGap: 2.1 // Can be calculated from actual consumption later
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -399,7 +691,7 @@ exports.getStockSummaryReport = async (req, res) => {
         }
 
         logToFile(`[STOCK SUMMARY] Request for Tenant: ${req.tenantId}, From: ${fromDate}, To: ${toDate}`);
-        const [materials, purchases, recipes, orders] = await Promise.all([
+        const [materials, purchases, recipes, orders, wastages] = await Promise.all([
             RawMaterial.findAll({ where: { tenantId: req.tenantId } }),
             PurchaseItem.findAll({ where: dateFilter, attributes: ['rawMaterialId', 'quantity'] }),
             Recipe.findAll({
@@ -409,23 +701,28 @@ exports.getStockSummaryReport = async (req, res) => {
             Order.findAll({
                 where: dateFilter,
                 include: [{ model: OrderItem, as: 'items' }]
-            })
+            }),
+            WastageItem.findAll({ where: dateFilter, attributes: ['rawMaterialId', 'quantity'] })
         ]);
 
-        logToFile(`[STOCK SUMMARY] Found ${materials.length} materials, ${purchases.length} purchases, ${orders.length} orders.`);
+        logToFile(`[STOCK SUMMARY] Found ${materials.length} materials, ${purchases.length} purchases, ${orders.length} orders, ${wastages.length} wastage records.`);
 
         // 1. Build Purchase Map
         const purchaseMap = {};
         purchases.forEach(p => { purchaseMap[p.rawMaterialId] = (purchaseMap[p.rawMaterialId] || 0) + p.quantity; });
 
-        // 2. Build Recipe Map (Key: itemId_variantId or itemId_null)
+        // 2. Build Wastage Map
+        const wastageMap = {};
+        wastages.forEach(w => { wastageMap[w.rawMaterialId] = (wastageMap[w.rawMaterialId] || 0) + w.quantity; });
+
+        // 3. Build Recipe Map (Key: itemId_variantId or itemId_null)
         const recipeMap = {};
         recipes.forEach(r => {
             const key = `${r.itemId}_${r.variantId || 'null'}`;
             recipeMap[key] = r;
         });
 
-        // 3. Calculate Consumption
+        // 4. Calculate Consumption
         const consumedMap = {};
         console.log(`[STOCK SUMMARY] Calculating for ${orders.length} orders...`);
         orders.forEach(order => {
@@ -441,7 +738,6 @@ exports.getStockSummaryReport = async (req, res) => {
                     ingredients.forEach(ing => {
                         const consumption = (ing.quantity / yieldQty) * orderItem.quantity;
                         consumedMap[ing.rawMaterialId] = (consumedMap[ing.rawMaterialId] || 0) + consumption;
-                        console.log(`[STOCK SUMMARY]   + ${order.orderNumber} matched! Mat ${ing.rawMaterialId} + ${consumption}`);
                     });
                 }
             });
@@ -451,25 +747,31 @@ exports.getStockSummaryReport = async (req, res) => {
         const report = await Promise.all(materials.map(async (m) => {
             const purchaseQty = purchaseMap[m.id] || 0;
             const consumedQty = consumedMap[m.id] || 0;
+            const wastageQty = wastageMap[m.id] || 0;
             const currentStock = m.currentStock;
 
             let openingStock = m.openingStock || 0;
             if (!m.lastStockUpdateDate || m.lastStockUpdateDate !== today) {
-                openingStock = currentStock - purchaseQty + consumedQty;
+                // Approximate opening if not snapshotted today
+                openingStock = currentStock - purchaseQty + consumedQty + wastageQty;
                 await m.update({ openingStock, lastStockUpdateDate: today });
             }
 
             return {
-                id: m.id, name: m.name, unit: m.consumptionUnit,
+                id: m.id,
+                sku: m.barcode || `RM${m.id.toString().padStart(3, '0')}`,
+                name: m.name,
+                unit: m.consumptionUnit,
                 opening: Math.max(0, openingStock),
                 purchase: purchaseQty,
                 totalInput: Math.max(0, openingStock) + purchaseQty,
                 consumed: consumedQty,
-                totalOutput: consumedQty,
+                wastage: wastageQty,
+                totalOutput: consumedQty + wastageQty,
                 closingStock: currentStock,
                 closingSummary: currentStock,
-                difference: Math.abs(currentStock - (openingStock + purchaseQty - consumedQty)) > 0.01
-                    ? (currentStock - (openingStock + purchaseQty - consumedQty))
+                difference: Math.abs(currentStock - (openingStock + purchaseQty - consumedQty - wastageQty)) > 0.01
+                    ? (currentStock - (openingStock + purchaseQty - consumedQty - wastageQty))
                     : 0
             };
         }));

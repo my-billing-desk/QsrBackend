@@ -35,9 +35,12 @@ const PurchaseReturnItem = require('./PurchaseReturnItem');
 const Outlet = require('./Outlet');
 const POSDevice = require('./POSDevice');
 const CashMovement = require('./CashMovement');
+const Wastage = require('./Wastage');
+const WastageItem = require('./WastageItem');
 const StockTransaction = require('./StockTransaction');
 const Customer = require('./Customer');
 const Role = require('./Role');
+
 
 // Relationships
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -113,6 +116,17 @@ PurchaseReturnItem.belongsTo(PurchaseReturn, { foreignKey: 'purchaseReturnId' })
 RawMaterial.hasMany(PurchaseReturnItem, { foreignKey: 'rawMaterialId' });
 PurchaseReturnItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
 
+// Wastage Relationships
+Wastage.hasMany(WastageItem, { foreignKey: 'wastageId' });
+WastageItem.belongsTo(Wastage, { foreignKey: 'wastageId' });
+
+RawMaterial.hasMany(WastageItem, { foreignKey: 'rawMaterialId' });
+WastageItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
+
+Item.hasMany(WastageItem, { foreignKey: 'itemId' });
+WastageItem.belongsTo(Item, { foreignKey: 'itemId' });
+
+
 // POS Device Relationships
 Tenant.hasMany(POSDevice, { foreignKey: 'tenantId' });
 POSDevice.belongsTo(Tenant, { foreignKey: 'tenantId' });
@@ -180,9 +194,11 @@ module.exports = {
     PurchaseOrder,
     PurchaseOrderItem,
     PurchaseReturn,
-    PurchaseReturn,
     PurchaseReturnItem,
+    Wastage,
+    WastageItem,
     Outlet,
+
     Aggregator,
     SpecialNote,
     POSDevice,

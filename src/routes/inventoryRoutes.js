@@ -25,9 +25,12 @@ router.post('/suppliers', protect, authorize(...managers), InventoryController.c
 
 router.get('/purchases', protect, authorize(...managers), InventoryController.getPurchases);
 router.post('/purchases', protect, authorize(...managers), InventoryController.createPurchase);
+router.put('/purchases/:id', protect, authorize(...managers), InventoryController.updatePurchase);
+router.delete('/purchases/:id', protect, authorize(...managers), InventoryController.deletePurchase);
 
 router.get('/orders', protect, authorize(...managers), InventoryController.getPurchaseOrders);
 router.post('/orders', protect, authorize(...managers), InventoryController.createPurchaseOrder);
+router.put('/orders/:id', protect, authorize(...managers), InventoryController.updatePurchaseOrder);
 router.post('/orders/:id/receive', protect, authorize(...managers), InventoryController.receivePurchaseOrder);
 
 router.get('/returns', protect, authorize(...managers), InventoryController.getPurchaseReturns);
