@@ -20,7 +20,6 @@ const Outlet = sequelize.define('Outlet', {
     country: { type: DataTypes.STRING, defaultValue: 'India' },
     state: { type: DataTypes.STRING, defaultValue: 'Karnataka' },
     city: { type: DataTypes.STRING, defaultValue: 'Bengaluru' },
-    zone: { type: DataTypes.STRING, comment: 'e.g. North, South, East, West or specific business zone' },
     timezone: { type: DataTypes.STRING, defaultValue: 'Asia/Calcutta' },
     address: { type: DataTypes.TEXT },
     area: { type: DataTypes.STRING },
@@ -39,21 +38,9 @@ const Outlet = sequelize.define('Outlet', {
     enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true },
 
     // Theme Configuration
-    themeColor: {
-        type: DataTypes.STRING,
-        defaultValue: '#dc2626', // Default red theme
-        comment: 'Primary theme color in hex format (e.g., #dc2626)'
-    },
-    themeName: {
-        type: DataTypes.STRING,
-        defaultValue: 'Ruby Red',
-        comment: 'Human readable name for the selected theme'
-    },
-    themePalette: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        comment: 'JSON string of color palette'
-    },
+    themeName: { type: DataTypes.STRING, defaultValue: 'Emerald & Slate (Light)' },
+    themeColor: { type: DataTypes.STRING, defaultValue: '#10B981' },
+    themePalette: { type: DataTypes.TEXT }, // Stores the full JSON palette
 
     tenantId: {
         type: DataTypes.UUID,

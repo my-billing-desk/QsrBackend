@@ -12,7 +12,7 @@ const Setting = sequelize.define('Setting', {
         allowNull: false
     },
     value: {
-        type: DataTypes.STRING, // Storing as string, parse as needed
+        type: DataTypes.TEXT, // Storing as string (JSON), parse as needed
         allowNull: false
     },
     description: {

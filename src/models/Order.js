@@ -56,10 +56,6 @@ const Order = sequelize.define('Order', {
         type: DataTypes.STRING, // e.g., 'UPI', 'Cash', 'Card'
         defaultValue: 'Cash'
     },
-    paymentDetails: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
     discount: {
         type: DataTypes.FLOAT,
         defaultValue: 0.0
@@ -84,14 +80,13 @@ const Order = sequelize.define('Order', {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
+    customerId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     tenantId: {
         type: DataTypes.UUID,
         allowNull: true
-    },
-    outletId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        comment: 'Reference to specific restaurant branch'
     }
 });
 

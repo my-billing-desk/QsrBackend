@@ -1,81 +1,62 @@
-const { User, Tenant, Category, Item, Variant, AddonGroup, VariationGroup, Addon, Setting, POSDevice, Role } = require('../models');
-const emailService = require('../utils/emailService');
+const { User, Tenant, PosDevice, Category, Item, Setting, Variant, Addon, AddonGroup, ItemAddonGroup, VariationGroup, ItemVariationGroup } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
-// In-memory OTP store (Use Redis or DB for production)
-const otpStore = new Map();
-
-const maskEmail = (email) => {
-    if (!email) return 'N/A';
-    const [name, domain] = email.split('@');
-    const maskedName = name.length > 2
-        ? name.substring(0, 2) + '*'.repeat(name.length - 2)
-        : name[0] + '*';
-    return `${maskedName}@${domain}`;
-};
-
 exports.login = async (req, res) => {
     try {
-        console.log('[LOGIN_DEBUG] Body:', JSON.stringify(req.body));
         let { username, password, email, tenantId, subdomain, passcode } = req.body;
 
-        // Auto-resolve tenantId if subdomain is used as tenantId (common in POS)
-        let resolvedTenantId = tenantId;
-        if (tenantId && !tenantId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-            const foundTenant = await Tenant.findOne({ where: { subdomain: tenantId } });
-            if (foundTenant) {
-                console.log(`[LOGIN_DEBUG] Resolved subdomain "${tenantId}" to UUID "${foundTenant.id}"`);
-                resolvedTenantId = foundTenant.id;
-            }
-        }
-
-        // Handle Passcode Login (mainly for POS)
+        // Handle Passcode Login
         if (passcode) {
-            console.log('[LOGIN_DEBUG] Attempting passcode login for resolved tenant:', resolvedTenantId);
-            if (!resolvedTenantId) {
-                return res.status(400).json({ error: 'Restaurant ID/Subdomain is required' });
+            if (!tenantId) {
+                return res.status(400).json({ error: 'Tenant ID required for passcode login' });
             }
 
-            const users = await User.findAll({
-                where: { tenantId: resolvedTenantId },
-                include: [
-                    { model: Tenant },
-                    { model: Role, as: 'roleData' }
-                ]
+            // Direct lookup using unique passcode
+            const foundUser = await User.findOne({
+                where: {
+                    tenantId,
+                    passcode: passcode
+                },
+                include: [{ model: Tenant }]
             });
 
-            let validUser = null;
-            for (const u of users) {
-                if (u.passcode && await bcrypt.compare(passcode.toString(), u.passcode)) {
-                    validUser = u;
-                    break;
+            if (!foundUser) {
+                return res.status(401).json({ error: 'Invalid Passcode' });
+            }
+
+            // Proceed as logged in
+            const token = jwt.sign(
+                { id: foundUser.id, role: foundUser.role, name: foundUser.displayName, tenantId: foundUser.tenantId },
+                JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+
+            return res.json({
+                token,
+                user: {
+                    id: foundUser.id,
+                    username: foundUser.username,
+                    role: foundUser.role,
+                    name: foundUser.displayName,
+                    tenantId: foundUser.tenantId,
+                    tenantName: foundUser.Tenant?.name
                 }
-            }
-
-            if (!validUser) {
-                return res.status(401).json({ error: 'Invalid passcode for this restaurant' });
-            }
-
-            return await sendLoginResponse(validUser, res);
-        }
-
-        // Handle Standard Login
-        const identifier = username || email;
-        const missing = [];
-        if (!identifier) missing.push('username/email');
-        if (!password) missing.push('password');
-
-        if (missing.length > 0) {
-            return res.status(400).json({
-                error: `[VER_2] ${missing.join(' and ')} required`,
-                received: req.body
             });
         }
 
+
+
+        const identifier = username || email;
+
+        if (!identifier || !password) {
+            return res.status(400).json({ error: 'Username/Email and Password are required' });
+        }
+
+        // Build query
         const query = {
             [Op.or]: [
                 { username: identifier },
@@ -83,24 +64,28 @@ exports.login = async (req, res) => {
             ]
         };
 
-        if (resolvedTenantId) query.tenantId = resolvedTenantId;
+        // If specific tenant requested (e.g. from POS config)
+        if (tenantId) {
+            query.tenantId = tenantId;
+        }
 
         let possibleUsers = await User.findAll({
             where: query,
-            include: [
-                { model: Tenant },
-                { model: Role, as: 'roleData' }
-            ]
+            include: [{ model: Tenant }]
         });
 
         if (possibleUsers.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        // If subdomain is provided, filter by it
+        // (Assuming the frontend sends subdomain if running on one, or user entered store code)
         if (subdomain) {
             possibleUsers = possibleUsers.filter(u => u.Tenant && u.Tenant.subdomain === subdomain);
         }
 
+        // If multiple users found, try to verify password for all to see if only one matches
+        // (This handles case where same username has different passwords across tenants)
         let validUsers = [];
         for (const u of possibleUsers) {
             if (await bcrypt.compare(password, u.password)) {
@@ -113,108 +98,54 @@ exports.login = async (req, res) => {
         }
 
         if (validUsers.length > 1) {
+            // Ambiguous! We strictly require a tenant identifier now.
+            // Do NOT reveal the accounts.
             return res.status(401).json({
                 error: 'Ambiguous account. Please provide valid Store Code.',
                 requireStoreCode: true
             });
         }
 
-        return await sendLoginResponse(validUsers[0], res);
+        const user = validUsers[0];
+
+        // CHECK TENANT STATUS
+        if (user.Tenant && user.Tenant.status !== 'active') {
+            return res.status(403).json({ error: 'Restaurant account is inactive' });
+        }
+
+        const token = jwt.sign(
+            { id: user.id, role: user.role, name: user.displayName, tenantId: user.tenantId },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                name: user.displayName,
+                tenantId: user.tenantId,
+                tenantName: user.Tenant?.name
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-// Helper to generate token and response
-async function sendLoginResponse(user, res) {
-    console.log(`[AUTH DEBUG]PID:${process.pid} User: ${user.username}, ID: ${user.id}, TenantID: ${user.tenantId} (Type: ${typeof user.tenantId})`);
-
-    let daysLeft = null;
-    const tenant = user.Tenant;
-
-    if (tenant) {
-        if (tenant.status === 'inactive' || tenant.status === 'suspended') {
-            return res.status(403).json({ error: 'Restaurant account is inactive' });
-        }
-
-        if (tenant.status === 'onboard_pending') {
-            return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
-        }
-
-        const now = new Date();
-        const expiryDate = tenant.subscriptionExpiryDate ? new Date(tenant.subscriptionExpiryDate) : null;
-
-        // Fallback for trials created before logic update (uses createdAt)
-        if (tenant.status === 'trial' && !expiryDate) {
-            const createdAt = new Date(tenant.createdAt);
-            const msPerDay = 1000 * 60 * 60 * 24;
-            const daysPassed = (now - createdAt) / msPerDay;
-
-            if (daysPassed > 7) {
-                tenant.status = 'onboard_pending';
-                await tenant.save();
-                return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
-            }
-            daysLeft = Math.ceil(7 - daysPassed);
-        }
-        else if (expiryDate) {
-            const msPerDay = 1000 * 60 * 60 * 24;
-            const timeLeft = expiryDate - now;
-
-            if (timeLeft < 0) {
-                if (tenant.status === 'trial') {
-                    tenant.status = 'onboard_pending';
-                    await tenant.save();
-                    return res.status(403).json({ error: 'Trial expired. Please upgrade your plan.' });
-                } else if (tenant.status === 'active') {
-                    // For active, we might not block immediately but warn, or block. 
-                    // User request didn't specify blocking for active, just showing days.
-                    daysLeft = 0;
-                }
-            } else {
-                daysLeft = Math.ceil(timeLeft / msPerDay);
-            }
-        }
-    }
-
-    const permissions = user.roleData ? user.roleData.permissions : [];
-    const roleName = user.roleData ? user.roleData.name : 'guest';
-
-    const token = jwt.sign(
-        { id: user.id, role: roleName, name: user.displayName, tenantId: user.tenantId, permissions },
-        JWT_SECRET,
-        { expiresIn: '24h' }
-    );
-
-    return res.json({
-        token,
-        user: {
-            id: user.id,
-            username: user.username,
-            role: roleName,
-            name: user.displayName,
-            tenantId: user.tenantId,
-            tenantName: user.Tenant?.name,
-            tenantStatus: user.Tenant?.status, // Send status to frontend to distinguish trial vs active
-            roleId: user.roleId,
-            permissions
-        },
-        daysLeft // Renamed from trialDaysLeft to generic daysLeft, but we can fallback map it in frontend
-    });
-}
-
-
 exports.register = async (req, res) => {
     try {
-        const { username, password, displayName, roleId, email } = req.body;
+        const { username, password, role, displayName, permissions } = req.body;
         const tenantId = req.user.tenantId; // Get from authenticated user
 
         const user = await User.create({
             username,
             password,
+            role,
             displayName,
-            email,
-            roleId,
+            permissions,
             tenantId
         });
 
@@ -230,263 +161,9 @@ exports.getUsers = async (req, res) => {
     try {
         const users = await User.findAll({
             where: { tenantId: req.user.tenantId },
-            attributes: { exclude: ['password', 'passcode'] },
-            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
+            attributes: { exclude: ['password'] }
         });
         res.json(users);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.updateUser = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { username, password, displayName, passcode, roleId, email } = req.body;
-
-        const user = await User.findOne({
-            where: { id, tenantId: req.user.tenantId }
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Owner protection: If trying to change roleId away from super_admin
-        if (roleId !== undefined && roleId !== user.roleId) {
-            const superAdminRole = await Role.findOne({ where: { name: 'super_admin', tenantId: req.user.tenantId } });
-            if (superAdminRole && user.roleId === superAdminRole.id) {
-                const superAdminCount = await User.count({ where: { roleId: superAdminRole.id, tenantId: req.user.tenantId } });
-                if (superAdminCount <= 1) {
-                    return res.status(400).json({ error: 'At least one owner (super_admin) is required. Cannot demote the last owner.' });
-                }
-            }
-        }
-
-        // Update fields
-        if (username) user.username = username;
-        if (email) user.email = email; // Allow email updates
-        if (password) user.password = password; // Hook in model handles hashing
-        if (displayName) user.displayName = displayName;
-        if (passcode) user.passcode = passcode; // Hook in model handles hashing
-        if (roleId !== undefined) user.roleId = roleId;
-
-        await user.save();
-
-        const { password: _, passcode: __, ...userData } = user.toJSON();
-        res.json(userData);
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-};
-
-exports.deleteUser = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        // Prevent self-deletion
-        if (parseInt(id) === req.user.id) {
-            return res.status(400).json({ error: 'Cannot delete yourself' });
-        }
-
-        const user = await User.findOne({
-            where: { id, tenantId: req.user.tenantId }
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Owner protection: Check if this is the last super_admin
-        const superAdminRole = await Role.findOne({ where: { name: 'super_admin', tenantId: req.user.tenantId } });
-        if (superAdminRole && user.roleId === superAdminRole.id) {
-            const superAdminCount = await User.count({ where: { roleId: superAdminRole.id, tenantId: req.user.tenantId } });
-            if (superAdminCount <= 1) {
-                return res.status(400).json({ error: 'At least one owner (super_admin) is required for admin access' });
-            }
-        }
-
-        await user.destroy();
-        res.json({ message: 'User deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.syncUsers = async (req, res) => {
-    try {
-        console.log('[SYNC USERS] Request from user:', req.user?.username, 'tenantId:', req.user?.tenantId);
-
-        if (!req.user || !req.user.tenantId) {
-            console.error('[SYNC USERS] Missing tenant ID');
-            return res.status(400).json({ error: 'Tenant ID required for sync' });
-        }
-
-        const users = await User.findAll({
-            where: { tenantId: req.user.tenantId },
-            attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
-            include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
-        });
-
-        console.log('[SYNC USERS] Returning', users.length, 'users for tenant', req.user.tenantId);
-        res.json(users);
-    } catch (error) {
-        console.error('[SYNC USERS ERROR]', error);
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.initTerminal = async (req, res) => {
-    try {
-        const { idOrSubdomain } = req.params;
-        console.log(`[INIT_DEBUG] Terminal init request for: "${idOrSubdomain}"`);
-
-        // Find Tenant
-        const tenant = await Tenant.findOne({
-            where: {
-                [Op.or]: [
-                    { id: idOrSubdomain },
-                    { subdomain: idOrSubdomain.toLowerCase() }
-                ]
-            }
-        });
-
-        if (!tenant) {
-            console.log(`[INIT_DEBUG] Tenant not found for: "${idOrSubdomain}"`);
-            return res.status(404).json({ error: 'Restaurant not found. Please verify the ID or Subdomain.' });
-        }
-
-        // FETCH FULL SYNC DATA DIRECTLY (SKIPPING OTP)
-        console.log(`[INIT_DEBUG] Fetching sync payload for tenant: ${tenant.id}`);
-        const payload = await getSyncPayload(tenant.id);
-        console.log(`[INIT_DEBUG] Sync payload fetched successfully. Users: ${payload.users.length}, Items: ${payload.menu.items.length}`);
-
-        res.json({
-            ...payload,
-            requiresOTP: false
-        });
-    } catch (error) {
-        console.error(`[INIT_ERROR] Failed for "${req.params.idOrSubdomain}":`, error);
-        res.status(500).json({ error: error.message });
-    }
-};
-
-const getSyncPayload = async (tenantId) => {
-    const tenant = await Tenant.findByPk(tenantId);
-    if (!tenant) throw new Error('Tenant not found');
-
-    const users = await User.findAll({
-        where: { tenantId: tenant.id },
-        attributes: ['id', 'username', 'displayName', 'password', 'passcode', 'tenantId', 'roleId'],
-        include: [{ model: Role, as: 'roleData', attributes: ['name', 'permissions'] }]
-    });
-
-    const categories = await Category.findAll({ where: { tenantId: tenant.id } });
-    const items = await Item.findAll({
-        where: { tenantId: tenant.id },
-        include: [
-            { model: Variant },
-            { model: AddonGroup, as: 'addonGroups', include: [Addon] },
-            { model: VariationGroup, as: 'variationGroups', include: [Variant] }
-        ]
-    });
-
-    const settings = await Setting.findAll({ where: { tenantId: tenant.id } });
-    const settingsObj = {};
-    settings.forEach(s => settingsObj[s.key] = s.value);
-
-    return {
-        tenant: {
-            id: tenant.id,
-            name: tenant.name,
-            subdomain: tenant.subdomain
-        },
-        users,
-        menu: {
-            categories,
-            items
-        },
-        settings: settingsObj
-    };
-};
-
-exports.sendOTP = async (req, res) => {
-    try {
-        const { tenantId } = req.body;
-        const tenant = await Tenant.findByPk(tenantId);
-        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
-
-        const owner = await User.findOne({
-            where: { tenantId: tenant.id },
-            include: [{
-                model: Role,
-                as: 'roleData',
-                where: { name: 'super_admin' }
-            }],
-            order: [['createdAt', 'ASC']]
-        });
-
-        if (!owner || !owner.email) {
-            return res.status(400).json({ error: 'Admin email not found' });
-        }
-
-        // Generate 6-digit OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // Store in memory for 10 minutes
-        otpStore.set(tenant.id, {
-            otp,
-            expires: Date.now() + 10 * 60 * 1000
-        });
-
-        // REAL EMAIL SENDING
-        await emailService.sendOTP(owner.email, otp, tenant.name);
-
-        res.json({ message: `OTP sent to ${maskEmail(owner.email)}` });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.verifyOTP = async (req, res) => {
-    try {
-        const { tenantId, otp } = req.body;
-
-        const stored = otpStore.get(tenantId);
-        if (!stored) return res.status(400).json({ error: 'OTP not requested or expired' });
-        if (Date.now() > stored.expires) {
-            otpStore.delete(tenantId);
-            return res.status(400).json({ error: 'OTP expired' });
-        }
-        if (stored.otp !== otp) {
-            return res.status(400).json({ error: 'Invalid OTP' });
-        }
-
-        // OTP Valid - Clear it
-        otpStore.delete(tenantId);
-
-        // Fetch full sync payload
-        const payload = await getSyncPayload(tenantId);
-        res.json(payload);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.getProfile = async (req, res) => {
-    try {
-        const user = await User.findByPk(req.user.id, {
-            include: [
-                { model: Tenant },
-                { model: Role, as: 'roleData' }
-            ]
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        return await sendLoginResponse(user, res);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -502,14 +179,13 @@ exports.googleCallback = (req, res, next) => {
             return res.redirect('http://localhost:5174/login?error=auth_failed');
         }
 
-        const userRole = user.roleData?.name || user.role;
         // Only Super Admin can login via Google
-        if (userRole !== 'super_admin') {
+        if (user.role !== 'super_admin') {
             return res.redirect('http://localhost:5174/login?error=unauthorized_role');
         }
 
         const token = jwt.sign(
-            { id: user.id, role: userRole, name: user.displayName },
+            { id: user.id, role: user.role, name: user.displayName },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
@@ -517,4 +193,194 @@ exports.googleCallback = (req, res, next) => {
         // Redirect to Web Admin with token
         res.redirect(`http://localhost:5174/login?token=${token}&username=${user.displayName}&role=${user.role}&id=${user.id}`);
     })(req, res, next);
+};
+
+exports.me = async (req, res) => {
+    try {
+        const user = await User.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] },
+            include: [{ model: Tenant }]
+        });
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.initTerminal = async (req, res) => {
+    try {
+        const { id } = req.params; // This is the Tenant ID or Subdomain provided by POS
+
+        // Try to find tenant by ID or Subdomain
+        const tenant = await Tenant.findOne({
+            where: {
+                [Op.or]: [
+                    { id: id },
+                    { subdomain: id }
+                ]
+            }
+        });
+
+        if (!tenant) {
+            return res.status(404).json({ error: 'Restaurant not found' });
+        }
+
+        if (tenant.status !== 'active') {
+            return res.status(403).json({ error: 'Restaurant account is inactive' });
+        }
+
+        // If we are skipping OTP (development mode or configured), return full data needed for sync
+        const SKIP_OTP = true; // Hardcoded for requested bypass
+
+        if (SKIP_OTP) {
+            // Gather Data for Sync (Same as verifyOTP)
+            const users = await User.findAll({
+                where: { tenantId: tenant.id },
+                attributes: { exclude: ['password'] }
+            });
+
+            // Fetch Menu
+            const categories = await Category.findAll({ where: { tenantId: tenant.id } });
+            const items = await Item.findAll({
+                where: { tenantId: tenant.id },
+                include: [
+                    { model: Variant },
+                    { model: AddonGroup, as: 'addonGroups', include: [Addon] }
+                ]
+            });
+
+            const settingsList = await Setting.findAll({ where: { tenantId: tenant.id } });
+            const settings = {};
+            settingsList.forEach(s => settings[s.key] = s.value);
+
+            return res.json({
+                tenant: {
+                    id: tenant.id,
+                    name: tenant.name,
+                    subdomain: tenant.subdomain
+                },
+                users,
+                menu: {
+                    categories,
+                    items
+                },
+                settings,
+                requiresOTP: false
+            });
+        }
+
+        // Get Owner Email for partial masking (for OTP confirmation UI)
+        const owner = await User.findOne({
+            where: {
+                tenantId: tenant.id,
+                role: 'super_admin' // Assuming super_admin is the owner
+            }
+        });
+
+        const ownerEmail = owner ? owner.email.replace(/(.{2})(.*)(?=@)/,
+            (gp1, gp2, gp3) => {
+                for (let i = 0; i < gp3.length; i++) {
+                    gp2 += "*";
+                }
+                return gp2;
+            }) : '******@***.com';
+
+
+        res.json({
+            tenant: {
+                id: tenant.id,
+                name: tenant.name,
+                subdomain: tenant.subdomain
+            },
+            ownerEmail,
+            requiresOTP: false // OTP Skipped for now
+        });
+    } catch (error) {
+        console.error('Init Terminal Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.sendOTP = async (req, res) => {
+    try {
+        const { tenantId } = req.body;
+        const tenant = await Tenant.findByPk(tenantId);
+
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+        // Generate 6 digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        tenant.otp = otp;
+        tenant.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+        await tenant.save();
+
+        // In production, send via Email/SMS
+        console.log(`[OTP] Sent to tenant ${tenant.name}: ${otp}`);
+
+        res.json({ message: 'OTP sent successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.verifyOTP = async (req, res) => {
+    try {
+        const { tenantId, otp } = req.body;
+        const tenant = await Tenant.findByPk(tenantId);
+
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+        if (tenant.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        if (new Date() > tenant.otpExpiresAt) {
+            return res.status(400).json({ error: 'OTP Expired' });
+        }
+
+        // Clear OTP
+        tenant.otp = null;
+        tenant.otpExpiresAt = null;
+        await tenant.save();
+
+        // Gather Data for Sync
+        const users = await User.findAll({
+            where: { tenantId },
+            attributes: { exclude: ['password'] }
+        });
+
+        // Fetch Menu
+        const categories = await Category.findAll({ where: { tenantId } });
+        const items = await Item.findAll({
+            where: { tenantId },
+            include: [
+                { model: Variant },
+                { model: AddonGroup, as: 'addonGroups', include: [Addon] }
+            ]
+        });
+
+        const settingsList = await Setting.findAll({ where: { tenantId } });
+        const settings = {};
+        settingsList.forEach(s => settings[s.key] = s.value);
+
+        res.json({
+            message: 'Verified',
+            tenant: {
+                id: tenant.id,
+                name: tenant.name,
+                subdomain: tenant.subdomain
+            },
+            users,
+            menu: {
+                categories,
+                items
+            },
+            settings
+        });
+
+    } catch (error) {
+        console.error('Verify OTP Error:', error);
+        res.status(500).json({ error: error.message });
+    }
 };

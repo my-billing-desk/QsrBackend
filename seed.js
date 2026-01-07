@@ -1,7 +1,7 @@
 const {
     sequelize, User, Category, Item, Variant, VariationGroup,
     RawMaterial, Supplier, Purchase, PurchaseItem,
-    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup, Aggregator, Role
+    Recipe, RecipeIngredient, Order, OrderItem, Tax, Outlet, Tenant, Addon, AddonGroup, ItemAddonGroup, ItemVariationGroup, Setting
 } = require('./src/models');
 const bcrypt = require('bcryptjs');
 
@@ -13,181 +13,58 @@ async function seed() {
 
         // 1. Tenant
         console.log('Seeding Tenant...');
-
-        // Tenant 1: Active Enterprise (Expiry in 365 days)
         const [tenant] = await Tenant.findOrCreate({
             where: { subdomain: 'sunburst' },
-            defaults: {
-                name: 'Sunburst Stack',
-                status: 'active',
-                subscriptionPlan: 'enterprise',
-                subscriptionExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 Year from now
-            }
+            defaults: { name: 'Sunburst Stack', status: 'active', subscriptionPlan: 'enterprise' }
         });
         const tenantId = tenant.id;
-        console.log(`[SEED] Created/Found Tenant "Sunburst Stack" with ID: ${tenantId}`);
-
-        // Tenant 2: Trial User (Expiry in 7 days) - For testing
-        const [trialTenant] = await Tenant.findOrCreate({
-            where: { subdomain: 'trialshop' },
-            defaults: {
-                name: 'Trial Coffee Shop',
-                status: 'trial',
-                subscriptionPlan: 'starter',
-                subscriptionExpiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-            }
-        });
-        console.log(`[SEED] Created/Found Tenant "Trial Coffee Shop" with ID: ${trialTenant.id}`);
-
-        // Tenant 3: Expired Trial (Onboard Pending) - For testing
-        const [expiredTenant] = await Tenant.findOrCreate({
-            where: { subdomain: 'expiredshop' },
-            defaults: {
-                name: 'Expired Pizza Place',
-                status: 'onboard_pending',
-                subscriptionPlan: 'starter',
-                subscriptionExpiryDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // Expired yesterday
-            }
-        });
-
-        // 1.1 Outlet (Linked to Sunburst Tenant)
-        console.log('Seeding Outlet for Sunburst...');
-        await Outlet.create({
-            name: 'Sunburst Main Outlet',
-            email: 'main@sunburst.com',
-            address: '123 Tech Park, Innovation Way',
-            country: 'India',
-            state: 'Karnataka',
-            city: 'Bengaluru',
-            tenantId: tenantId,
-            themeName: 'Midnight Emerald (Dark)',
-            themeColor: '#34D399',
-            themePalette: JSON.stringify({
-                id: 'midnight_emerald',
-                name: 'Midnight Emerald (Dark)',
-                colors: ['#34D399', '#0F172A', '#1E293B', '#F8FAFC', '#020617'],
-                isPro: true,
-                type: 'dark',
-                settings: {
-                    '--bg-main': '#0F172A',
-                    '--bg-surface': '#1E293B',
-                    '--bg-sidebar': '#020617',
-                    '--bg-header': '#0F172A',
-                    '--text-main': '#F8FAFC',
-                    '--text-muted': '#94A3B8',
-                    '--color-primary': '#34D399',
-                    '--color-primary-hover': '#10B981',
-                    '--color-secondary': '#64748B',
-                    '--status-success': '#22C55E',
-                    '--status-warning': '#F59E0B',
-                    '--status-error': '#EF4444',
-                    '--status-info': '#3B82F6',
-                    '--border-color': '#334155',
-                    '--sidebar-active': 'rgba(52, 211, 153, 0.1)',
-                    '--sidebar-active-text': '#34D399',
-                    '--sidebar-text': '#94A3B8',
-                    '--pos-btn-pay': '#34D399',
-                    '--pos-btn-hold': '#F59E0B',
-                    '--pos-btn-save': '#64748B',
-                    '--pos-btn-cancel': '#EF4444',
-                    '--chart-1': '#34D399',
-                    '--chart-2': '#3B82F6',
-                    '--chart-3': '#8B5CF6',
-                    '--chart-4': '#64748B',
-                    '--chart-5': '#EC4899',
-                }
-            })
-        });
-        console.log('[SEED] Outlet Seeding Successfully Created');
-
-        // 1.2 Roles
-        console.log('Seeding Roles...');
-        const createDefaultRoles = async (tid) => {
-            const roles = [
-                { name: 'super_admin', description: 'System Owner' },
-                { name: 'admin', description: 'Restaurant Manager' },
-                { name: 'cashier', description: 'Counter Staff' },
-                { name: 'kitchen', description: 'KDS Access' },
-                { name: 'captain', description: 'Waiter/Captain App' }
-            ];
-            const createdRoles = {};
-            for (const r of roles) {
-                const role = await Role.create({ ...r, tenantId: tid, permissions: [] }); // Start with empty array, Admin can configure in UI
-                createdRoles[r.name] = role.id;
-            }
-            return createdRoles;
-        };
-
-        const sunburstRoles = await createDefaultRoles(tenantId);
-        const trialRoles = await createDefaultRoles(trialTenant.id);
-        const expiredRoles = await createDefaultRoles(expiredTenant.id);
+        console.log('Created Tenant ID:', tenantId);
 
         // 2. Users (Super Admin, Manager, Cashier, Kitchen)
-        console.log(`Seeding Users for TenantID: ${tenantId}...`);
+        console.log('Seeding Users...');
 
         // Super Admin
         await User.create({
             username: 'guna',
             password: 'king123',
-            passcode: '1111',
-            roleId: sunburstRoles['super_admin'],
+            role: 'super_admin',
             displayName: 'Super Admin',
-            email: 'sunburststack@gmail.com',
-            tenantId: tenantId
+            email: 'guna.swtkiller@gmail.com',
+            tenantId: tenantId,
+            passcode: '1111'
         });
 
         // Admin
         await User.create({
             username: 'admin',
             password: 'admin123',
-            passcode: '2222',
-            roleId: sunburstRoles['admin'],
-            displayName: 'Restaurant Admin',
-            tenantId: tenantId
-        });
-
-        // Trial Tenant User
-        await User.create({
-            username: 'trialuser',
-            password: '123',
-            passcode: '0000',
-            roleId: trialRoles['super_admin'],
-            displayName: 'Trial User',
-            email: 'trial@trialshop.com',
-            tenantId: trialTenant.id
-        });
-
-        // Expired Tenant User
-        await User.create({
-            username: 'expireduser',
-            password: '123',
-            passcode: '9999',
-            roleId: expiredRoles['super_admin'],
-            displayName: 'Expired User',
-            email: 'expired@expiredshop.com',
-            tenantId: expiredTenant.id
+            role: 'admin',
+            displayName: 'Store Manager',
+            email: 'manager@sunburst.com',
+            tenantId: tenantId,
+            passcode: '1234'
         });
 
         // Cashier
         await User.create({
             username: 'cashier',
             password: '123',
-            passcode: '2024',
-            roleId: sunburstRoles['cashier'],
+            role: 'cashier',
             displayName: 'Cashier 1',
             email: 'cashier@sunburst.com',
-            tenantId: tenantId
+            tenantId: tenantId,
+            passcode: '2222'
         });
 
         // Kitchen
         await User.create({
             username: 'kitchen',
             password: '123',
-            passcode: '3030',
-            roleId: sunburstRoles['kitchen'],
+            role: 'kitchen',
             displayName: 'Head Chef',
             email: 'chef@sunburst.com',
-            tenantId: tenantId
+            tenantId: tenantId,
+            passcode: '3333'
         });
 
 
@@ -254,118 +131,6 @@ async function seed() {
             tenantId
         });
 
-        // Additional Raw Materials for comprehensive testing
-        const lettuce = await RawMaterial.create({
-            name: 'Lettuce',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 25.00,
-            currentStock: 8,
-            minStockLevel: 2,
-            tenantId
-        });
-
-        const onion = await RawMaterial.create({
-            name: 'Onion',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 30.00,
-            currentStock: 12,
-            minStockLevel: 3,
-            tenantId
-        });
-
-        const mayo = await RawMaterial.create({
-            name: 'Mayonnaise',
-            purchaseUnit: 'Liter',
-            consumptionUnit: 'Ml',
-            conversionFactor: 1000,
-            purchasePrice: 120.00,
-            currentStock: 5,
-            minStockLevel: 1,
-            tenantId
-        });
-
-        const oil = await RawMaterial.create({
-            name: 'Cooking Oil',
-            purchaseUnit: 'Liter',
-            consumptionUnit: 'Ml',
-            conversionFactor: 1000,
-            purchasePrice: 150.00,
-            currentStock: 20,
-            minStockLevel: 5,
-            tenantId
-        });
-
-        const basil = await RawMaterial.create({
-            name: 'Fresh Basil',
-            purchaseUnit: 'Bunch',
-            consumptionUnit: 'Gram',
-            conversionFactor: 50, // 50g per bunch
-            purchasePrice: 15.00,
-            currentStock: 10,
-            minStockLevel: 3,
-            tenantId
-        });
-
-        const oliveOil = await RawMaterial.create({
-            name: 'Olive Oil',
-            purchaseUnit: 'Liter',
-            consumptionUnit: 'Ml',
-            conversionFactor: 1000,
-            purchasePrice: 450.00,
-            currentStock: 3,
-            minStockLevel: 1,
-            tenantId
-        });
-
-        const pizzaSauce = await RawMaterial.create({
-            name: 'Pizza Sauce',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 80.00,
-            currentStock: 10,
-            minStockLevel: 3,
-            tenantId
-        });
-
-        const pepperoni = await RawMaterial.create({
-            name: 'Pepperoni',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 280.00,
-            currentStock: 5,
-            minStockLevel: 2,
-            tenantId
-        });
-
-        const mushroom = await RawMaterial.create({
-            name: 'Button Mushrooms',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 80.00,
-            currentStock: 4,
-            minStockLevel: 1,
-            tenantId
-        });
-
-        const bellPepper = await RawMaterial.create({
-            name: 'Bell Pepper',
-            purchaseUnit: 'Kg',
-            consumptionUnit: 'Gram',
-            conversionFactor: 1000,
-            purchasePrice: 60.00,
-            currentStock: 6,
-            minStockLevel: 2,
-            tenantId
-        });
-
-
         // 4. Categories
         console.log('Seeding Categories...');
         const catBurgers = await Category.create({ name: 'Burgers', icon: 'burger', tenantId });
@@ -399,14 +164,11 @@ async function seed() {
             tenantId
         });
 
-        // Recipe for Burger (Enhanced with more ingredients)
+        // Recipe for Burger
         const burgerRecipe = await Recipe.create({ itemId: burger.id, tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: bun.id, quantity: 1, unit: 'Pieces', tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: chickenPatty.id, quantity: 1, unit: 'Pieces', tenantId });
         await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: cheese.id, quantity: 1, unit: 'Slice', tenantId });
-        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: lettuce.id, quantity: 20, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: onion.id, quantity: 15, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: burgerRecipe.id, rawMaterialId: mayo.id, quantity: 10, unit: 'Ml', tenantId });
 
 
         // -- Margherita Pizza
@@ -420,15 +182,6 @@ async function seed() {
             tenantId
         });
 
-        // Recipe for Margherita Pizza
-        const pizzaRecipe = await Recipe.create({ itemId: pizza.id, tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: basil.id, quantity: 5, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
-        await RecipeIngredient.create({ recipeId: pizzaRecipe.id, rawMaterialId: tomato.id, quantity: 50, unit: 'Gram', tenantId });
-
         // Variations for Pizza
         await ItemVariationGroup.create({ itemId: pizza.id, variationGroupId: sizeGroup.id, tenantId });
         await Variant.create({ name: 'Regular', price: 250, variationGroupId: sizeGroup.id, itemId: pizza.id, tenantId });
@@ -437,59 +190,6 @@ async function seed() {
 
         // Addons for Pizza
         await ItemAddonGroup.create({ itemId: pizza.id, addonGroupId: toppingsGroup.id, tenantId });
-
-        // -- Pepperoni Pizza (New Item)
-        const pepperoniPizza = await Item.create({
-            name: 'Pepperoni Pizza',
-            price: 350,
-            description: 'Delicious pizza loaded with pepperoni.',
-            shortCode: 'PP01',
-            categoryId: catPizza.id,
-            type: 'non-veg',
-            tenantId
-        });
-
-        const pepperoniPizzaRecipe = await Recipe.create({ itemId: pepperoniPizza.id, tenantId });
-        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: pepperoni.id, quantity: 100, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: pepperoniPizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
-
-        await ItemVariationGroup.create({ itemId: pepperoniPizza.id, variationGroupId: sizeGroup.id, tenantId });
-        await Variant.create({ name: 'Regular', price: 350, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
-        await Variant.create({ name: 'Medium', price: 450, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
-        await Variant.create({ name: 'Large', price: 590, variationGroupId: sizeGroup.id, itemId: pepperoniPizza.id, tenantId });
-
-        await ItemAddonGroup.create({ itemId: pepperoniPizza.id, addonGroupId: toppingsGroup.id, tenantId });
-
-        // -- Veggie Supreme Pizza (New Item)
-        const veggiePizza = await Item.create({
-            name: 'Veggie Supreme Pizza',
-            price: 300,
-            description: 'Loaded with fresh vegetables.',
-            shortCode: 'VP01',
-            categoryId: catPizza.id,
-            type: 'veg',
-            tenantId
-        });
-
-        const veggiePizzaRecipe = await Recipe.create({ itemId: veggiePizza.id, tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: flour.id, quantity: 200, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: pizzaSauce.id, quantity: 80, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: mozzarella.id, quantity: 150, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: mushroom.id, quantity: 50, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: bellPepper.id, quantity: 40, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: onion.id, quantity: 30, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: tomato.id, quantity: 30, unit: 'Gram', tenantId });
-        await RecipeIngredient.create({ recipeId: veggiePizzaRecipe.id, rawMaterialId: oliveOil.id, quantity: 15, unit: 'Ml', tenantId });
-
-        await ItemVariationGroup.create({ itemId: veggiePizza.id, variationGroupId: sizeGroup.id, tenantId });
-        await Variant.create({ name: 'Regular', price: 300, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
-        await Variant.create({ name: 'Medium', price: 400, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
-        await Variant.create({ name: 'Large', price: 540, variationGroupId: sizeGroup.id, itemId: veggiePizza.id, tenantId });
-
-        await ItemAddonGroup.create({ itemId: veggiePizza.id, addonGroupId: toppingsGroup.id, tenantId });
 
         // -- Coke
         await Item.create({
@@ -514,8 +214,58 @@ async function seed() {
             tenantId
         });
 
-        // 8. Taxes
+        // 8. Taxes & Settings
         await Tax.create({ name: 'GST', percentage: 5, tenantId });
+
+        console.log('Seeding Settings...');
+        const defaultSettings = [
+            { key: 'gst_mode', value: 'exclusive', tenantId },
+            { key: 'gst_percentage', value: '5', tenantId },
+            {
+                key: 'theme_config', value: JSON.stringify({
+                    admin: {
+                        background: '#f8fafc',
+                        sidebar: '#ffffff',
+                        sidebar_text: '#1e293b',
+                        sidebar_active: '#f1f5f9',
+                        sidebar_active_text: '#0f172a',
+                        header: '#ffffff',
+                        header_text: '#1e293b',
+                        card: '#ffffff',
+                        primary_button: '#10b981',
+                        primary_button_text: '#ffffff',
+                        secondary_button: '#f1f5f9',
+                        secondary_button_text: '#475569',
+                        text_main: '#1e293b',
+                        text_muted: '#64748b',
+                        border_color: '#e2e8f0',
+                        input_background: '#ffffff'
+                    },
+                    pos: {
+                        background: '#f1f5f9',
+                        header: '#ffffff',
+                        sidebar: '#ffffff',
+                        category_button: '#ffffff',
+                        category_active: '#10b981',
+                        category_active_text: '#ffffff',
+                        item_card: '#ffffff',
+                        item_text: '#1e293b',
+                        checkout_button: '#10b981',
+                        checkout_button_text: '#ffffff',
+                        confirm_button: '#10b981',
+                        confirm_button_text: '#ffffff',
+                        cancel_button: '#ef4444',
+                        cancel_button_text: '#ffffff',
+                        numpad_button: '#ffffff',
+                        numpad_text: '#1e293b'
+                    }
+                }), tenantId
+            }
+        ];
+
+        for (const s of defaultSettings) {
+            await Setting.create(s);
+        }
 
         // 9. Orders (Sample Data)
         console.log('Seeding Orders...');
@@ -538,64 +288,6 @@ async function seed() {
             include: [{ model: OrderItem, as: 'items' }]
         });
 
-
-        // 10. Aggregators
-        console.log('Seeding Aggregators...');
-        await Aggregator.create({
-            name: 'Zomato',
-            slug: 'zomato',
-            isConnected: true,
-            icon: 'https://upload.wikimedia.org/wikipedia/commons/b/bd/Zomato_Logo.png',
-            tenantId
-        });
-        await Aggregator.create({
-            name: 'Swiggy',
-            slug: 'swiggy',
-            isConnected: true,
-            icon: 'https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png',
-            tenantId
-        });
-        await Aggregator.create({
-            name: 'ONDC',
-            slug: 'ondc',
-            isConnected: false,
-            icon: 'https://upload.wikimedia.org/wikipedia/commons/2/29/ONDC_Official_Logo.svg',
-            tenantId
-        });
-
-        // 11. Online Orders (Sample)
-        console.log('Seeding Online Orders...');
-        await Order.create({
-            orderNumber: 'ZOM-8821',
-            customerName: 'Alice Smith',
-            customerPhone: '9898989898',
-            type: 'delivery',
-            source: 'Zomato',
-            status: 'placed',
-            paymentStatus: 'paid',
-            totalAmount: 315,
-            tenantId,
-            items: [
-                { itemId: pizza.id, itemName: 'Margherita Pizza (Regular)', quantity: 1, price: 250, total: 250, tenantId },
-                { itemId: burger.id, itemName: 'Classic Burger', quantity: 1, price: 50, total: 50, tenantId }
-            ]
-        }, { include: [{ model: OrderItem, as: 'items' }] });
-
-        await Order.create({
-            orderNumber: 'SWI-9912',
-            customerName: 'Bob Vance',
-            customerPhone: '9797979797',
-            type: 'delivery',
-            source: 'Swiggy',
-            status: 'preparing',
-            paymentStatus: 'paid',
-            totalAmount: 190,
-            tenantId,
-            items: [
-                { itemId: burger.id, itemName: 'Classic Chicken Burger', quantity: 1, price: 150, total: 150, tenantId },
-                { itemId: 3, itemName: 'Coca Cola', quantity: 1, price: 40, total: 40, tenantId }
-            ]
-        }, { include: [{ model: OrderItem, as: 'items' }] });
 
         console.log('--- Seed Completed Successfully ---');
         process.exit(0);

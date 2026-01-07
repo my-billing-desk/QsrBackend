@@ -1,199 +1,77 @@
-const { POSDevice, Outlet } = require('../models');
-const { Op } = require('sequelize');
+const { PosDevice } = require('../models');
 
-// Register or update a POS device
-exports.registerDevice = async (req, res) => {
+exports.getAll = async (req, res) => {
     try {
-        const {
-            deviceId,
-            deviceName,
-            deviceType,
-            platform,
-            appVersion,
-            ipAddress,
-            macAddress,
-            metadata
-        } = req.body;
-
-        const tenantId = req.user.tenantId;
-
-        if (!deviceId || !deviceName) {
-            return res.status(400).json({ error: 'deviceId and deviceName are required' });
-        }
-
-        // Check if device already exists
-        const existingDevice = await POSDevice.findOne({
-            where: { deviceId, tenantId }
+        const devices = await PosDevice.findAll({
+            where: { tenantId: req.user.tenantId }
         });
-
-        if (existingDevice) {
-            // Update existing device
-            await existingDevice.update({
-                deviceName,
-                deviceType,
-                platform,
-                appVersion,
-                ipAddress,
-                macAddress,
-                metadata,
-                status: 'active',
-                lastActiveAt: new Date()
-            });
-
-            return res.json({
-                message: 'Device updated successfully',
-                device: existingDevice
-            });
-        } else {
-            // Create new device
-            const newDevice = await POSDevice.create({
-                deviceId,
-                deviceName,
-                deviceType,
-                platform,
-                appVersion,
-                ipAddress,
-                macAddress,
-                metadata,
-                tenantId,
-                status: 'active',
-                activatedAt: new Date(),
-                lastActiveAt: new Date()
-            });
-
-            return res.status(201).json({
-                message: 'Device registered successfully',
-                device: newDevice
-            });
-        }
+        res.json(devices);
     } catch (error) {
-        console.error('Error registering device:', error);
-        res.status(500).json({ error: 'Failed to register device' });
+        res.status(500).json({ error: error.message });
     }
 };
 
-// Update device heartbeat (last active timestamp)
-exports.updateHeartbeat = async (req, res) => {
+exports.getStats = async (req, res) => {
     try {
-        const { deviceId } = req.body;
-        const tenantId = req.user.tenantId;
+        const total = await PosDevice.count({ where: { tenantId: req.user.tenantId } });
+        const active = await PosDevice.count({ where: { tenantId: req.user.tenantId, status: 'active' } });
+        res.json({ total, active });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
-        const device = await POSDevice.findOne({
-            where: { deviceId, tenantId }
+exports.register = async (req, res) => {
+    try {
+        const { name, code } = req.body;
+        const device = await PosDevice.create({
+            name,
+            code,
+            tenantId: req.user.tenantId
+        });
+        res.status(201).json(device);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
+exports.heartbeat = async (req, res) => {
+    try {
+        const { code } = req.body;
+        const device = await PosDevice.findOne({
+            where: { code, tenantId: req.user.tenantId }
         });
 
         if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        await device.update({
-            lastActiveAt: new Date(),
-            status: 'active'
-        });
+        device.lastHeartbeat = new Date();
+        device.status = 'active';
+        await device.save();
 
-        res.json({ message: 'Heartbeat updated', device });
+        res.json({ status: 'ok' });
     } catch (error) {
-        console.error('Error updating heartbeat:', error);
-        res.status(500).json({ error: 'Failed to update heartbeat' });
+        res.status(500).json({ error: error.message });
     }
 };
 
-// Get all devices for a tenant
-exports.getDevices = async (req, res) => {
-    try {
-        const tenantId = req.user?.tenantId || req.tenantId;
-
-        if (!tenantId) {
-            return res.status(401).json({ error: 'Tenant ID not found' });
-        }
-
-        const devices = await POSDevice.findAll({
-            where: { tenantId },
-            include: [
-                {
-                    model: Outlet,
-                    required: false,
-                    attributes: ['id', 'name', 'location']
-                }
-            ],
-            order: [['lastActiveAt', 'DESC']]
-        });
-
-        // Calculate active vs inactive
-        const now = new Date();
-        const fiveMinutesAgo = new Date(now - 5 * 60 * 1000);
-
-        const devicesWithStatus = devices.map(device => {
-            const isActive = device.lastActiveAt && device.lastActiveAt > fiveMinutesAgo;
-            return {
-                ...device.toJSON(),
-                isOnline: isActive,
-                status: isActive ? 'active' : 'offline'
-            };
-        });
-
-        const activeCount = devicesWithStatus.filter(d => d.isOnline).length;
-
-        res.json({
-            total: devices.length,
-            active: activeCount,
-            inactive: devices.length - activeCount,
-            devices: devicesWithStatus
-        });
-    } catch (error) {
-        console.error('Error fetching devices:', error);
-        res.status(500).json({ error: 'Failed to fetch devices' });
-    }
-};
-
-// Get device statistics
-exports.getDeviceStats = async (req, res) => {
-    try {
-        const tenantId = req.user.tenantId;
-        const now = new Date();
-        const fiveMinutesAgo = new Date(now - 5 * 60 * 1000);
-
-        const allDevices = await POSDevice.findAll({
-            where: { tenantId }
-        });
-
-        const activeDevices = allDevices.filter(
-            device => device.lastActiveAt && device.lastActiveAt > fiveMinutesAgo
-        );
-
-        res.json({
-            total: allDevices.length,
-            active: activeDevices.length,
-            inactive: allDevices.length - activeDevices.length,
-            lastUpdated: new Date()
-        });
-    } catch (error) {
-        console.error('Error fetching device stats:', error);
-        res.status(500).json({ error: 'Failed to fetch device stats' });
-    }
-};
-
-// Deactivate a device
-exports.deactivateDevice = async (req, res) => {
+exports.deactivate = async (req, res) => {
     try {
         const { id } = req.params;
-        const tenantId = req.user.tenantId;
-
-        const device = await POSDevice.findOne({
-            where: { id, tenantId }
+        const device = await PosDevice.findOne({
+            where: { id, tenantId: req.user.tenantId }
         });
 
         if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }
 
-        await device.update({ status: 'inactive' });
+        device.status = 'inactive';
+        await device.save();
 
-        res.json({ message: 'Device deactivated successfully', device });
+        res.json(device);
     } catch (error) {
-        console.error('Error deactivating device:', error);
-        res.status(500).json({ error: 'Failed to deactivate device' });
+        res.status(500).json({ error: error.message });
     }
 };
-
-module.exports = exports;

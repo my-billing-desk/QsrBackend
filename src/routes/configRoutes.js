@@ -2,11 +2,9 @@ const express = require('express');
 const router = express.Router();
 const OutletController = require('../controllers/OutletController');
 
-const { protect, authorize } = require('../middleware/authMiddleware');
-
-const configAdmins = ['super_admin', 'admin'];
+const { protect } = require('../middleware/authMiddleware');
 
 router.get('/outlet', protect, OutletController.getOutletConfig);
-router.post('/outlet', protect, authorize(...configAdmins), OutletController.updateOutletConfig);
+router.post('/outlet', protect, OutletController.updateOutletConfig);
 
 module.exports = router;

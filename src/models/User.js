@@ -22,27 +22,9 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: true
     },
-
-    // Hierarchical Scope
-    assignedOutletId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        comment: 'Direct link to a single outlet'
-    },
-    assignedOutlets: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        comment: 'Array of Outlet IDs for Area/City managers'
-    },
-    assignedRegion: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        comment: 'Geographical scope { zone, city, state }'
-    },
-    assignedShift: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        comment: 'Shift name/code for Shift Managers'
+    role: {
+        type: DataTypes.ENUM('super_admin', 'admin', 'manager', 'cashier'),
+        defaultValue: 'cashier'
     },
     googleId: {
         type: DataTypes.STRING,
@@ -53,42 +35,25 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: false
     },
-    phone: {
-        type: DataTypes.STRING,
+    permissions: {
+        type: DataTypes.JSON, // Stores permissions as a JSON object
         allowNull: true
-    },
-    passcode: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: 'user_tenant_unique'
     },
     tenantId: {
         type: DataTypes.UUID,
         allowNull: true,
         unique: 'user_tenant_unique'
     },
-    roleId: {
-        type: DataTypes.UUID,
+    passcode: {
+        type: DataTypes.STRING,
         allowNull: true
     }
 });
 
-// Hash password and passcode before saving
+// Hash password before saving
 User.beforeCreate(async (user) => {
     if (user.password) {
         user.password = await bcrypt.hash(user.password, 10);
-    }
-    if (user.passcode) {
-        user.passcode = await bcrypt.hash(user.passcode, 10);
-    }
-});
-
-User.beforeUpdate(async (user) => {
-    if (user.changed('password')) {
-        user.password = await bcrypt.hash(user.password, 10);
-    }
-    if (user.changed('passcode')) {
-        user.passcode = await bcrypt.hash(user.passcode, 10);
     }
 });
 

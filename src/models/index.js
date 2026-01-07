@@ -9,6 +9,8 @@ const Addon = require('./Addon');
 const Aggregator = require('./Aggregator');
 const Tax = require('./Tax');
 const SpecialNote = require('./SpecialNote');
+const PosDevice = require('./PosDevice');
+const Subscription = require('./Subscription');
 
 const Discount = require('./Discount');
 const Setting = require('./Setting');
@@ -33,14 +35,6 @@ const PurchaseOrderItem = require('./PurchaseOrderItem');
 const PurchaseReturn = require('./PurchaseReturn');
 const PurchaseReturnItem = require('./PurchaseReturnItem');
 const Outlet = require('./Outlet');
-const POSDevice = require('./POSDevice');
-const CashMovement = require('./CashMovement');
-const Wastage = require('./Wastage');
-const WastageItem = require('./WastageItem');
-const StockTransaction = require('./StockTransaction');
-const Customer = require('./Customer');
-const Role = require('./Role');
-
 
 // Relationships
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -76,10 +70,10 @@ Item.belongsToMany(VariationGroup, { through: ItemVariationGroup, foreignKey: 'i
 VariationGroup.belongsToMany(Item, { through: ItemVariationGroup, foreignKey: 'variationGroupId', as: 'items' });
 
 // Inventory / Recipe Relationships
-Item.hasOne(Recipe, { foreignKey: 'itemId', as: 'recipe' });
+Item.hasOne(Recipe, { foreignKey: 'itemId' });
 Recipe.belongsTo(Item, { foreignKey: 'itemId' });
 
-Variant.hasOne(Recipe, { foreignKey: 'variantId', as: 'recipe' });
+Variant.hasOne(Recipe, { foreignKey: 'variantId' });
 Recipe.belongsTo(Variant, { foreignKey: 'variantId' });
 
 Recipe.hasMany(RecipeIngredient, { foreignKey: 'recipeId' });
@@ -116,57 +110,51 @@ PurchaseReturnItem.belongsTo(PurchaseReturn, { foreignKey: 'purchaseReturnId' })
 RawMaterial.hasMany(PurchaseReturnItem, { foreignKey: 'rawMaterialId' });
 PurchaseReturnItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
 
-// Wastage Relationships
-Wastage.hasMany(WastageItem, { foreignKey: 'wastageId' });
-WastageItem.belongsTo(Wastage, { foreignKey: 'wastageId' });
+const { Expense, ExpenseCategory } = require('./Expense');
+const { Withdrawal, WithdrawalCategory } = require('./Withdrawal');
+const { CashTopUp, CashTopUpCategory } = require('./CashTopUp');
 
-RawMaterial.hasMany(WastageItem, { foreignKey: 'rawMaterialId' });
-WastageItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
+// Loyalty Models
+const Customer = require('./Customer');
+const LoyaltyConfig = require('./LoyaltyConfig');
+const LoyaltyTier = require('./LoyaltyTier');
+const CustomerLoyalty = require('./CustomerLoyalty');
+const LoyaltyTransaction = require('./LoyaltyTransaction');
+const LoyaltyReward = require('./LoyaltyReward');
 
-Item.hasMany(WastageItem, { foreignKey: 'itemId' });
-WastageItem.belongsTo(Item, { foreignKey: 'itemId' });
+// Gift Card Models
+const GiftCard = require('./GiftCard');
+const GiftCardTransaction = require('./GiftCardTransaction');
+const Feedback = require('./Feedback');
 
+// Loyalty Relationships
+Customer.hasOne(CustomerLoyalty, { foreignKey: 'customerId', as: 'loyalty' });
+CustomerLoyalty.belongsTo(Customer, { foreignKey: 'customerId' });
 
-// POS Device Relationships
-Tenant.hasMany(POSDevice, { foreignKey: 'tenantId' });
-POSDevice.belongsTo(Tenant, { foreignKey: 'tenantId' });
+CustomerLoyalty.belongsTo(LoyaltyTier, { foreignKey: 'tierId', as: 'tier' });
+LoyaltyTier.hasMany(CustomerLoyalty, { foreignKey: 'tierId' });
 
-Outlet.hasMany(POSDevice, { foreignKey: 'outletId' });
-POSDevice.belongsTo(Outlet, { foreignKey: 'outletId' });
-
-// Cash Movement Relationships
-Tenant.hasMany(CashMovement, { foreignKey: 'tenantId' });
-CashMovement.belongsTo(Tenant, { foreignKey: 'tenantId' });
-
-User.hasMany(CashMovement, { foreignKey: 'performedBy', as: 'performedMovements' });
-CashMovement.belongsTo(User, { foreignKey: 'performedBy', as: 'performer' });
-
-User.hasMany(CashMovement, { foreignKey: 'approvedBy', as: 'approvedMovements' });
-CashMovement.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
-
-// Stock Transaction Relationships
-RawMaterial.hasMany(StockTransaction, { foreignKey: 'rawMaterialId' });
-StockTransaction.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
-
-Order.hasMany(StockTransaction, { foreignKey: 'orderId' });
-StockTransaction.belongsTo(Order, { foreignKey: 'orderId' });
-
-User.hasMany(StockTransaction, { foreignKey: 'performedBy', as: 'stockTransactions' });
-StockTransaction.belongsTo(User, { foreignKey: 'performedBy', as: 'performer' });
-
-// Customer Relationships
-Tenant.hasMany(Customer, { foreignKey: 'tenantId' });
-Customer.belongsTo(Tenant, { foreignKey: 'tenantId' });
+Customer.hasMany(LoyaltyTransaction, { foreignKey: 'customerId', as: 'loyaltyTransactions' });
+LoyaltyTransaction.belongsTo(Customer, { foreignKey: 'customerId' });
 
 Order.belongsTo(Customer, { foreignKey: 'customerId' });
 Customer.hasMany(Order, { foreignKey: 'customerId' });
 
-// Role Relationships
-Tenant.hasMany(Role, { foreignKey: 'tenantId' });
-Role.belongsTo(Tenant, { foreignKey: 'tenantId' });
+// Gift Card Relationships
+GiftCard.hasMany(GiftCardTransaction, { foreignKey: 'giftCardId', as: 'transactions' });
+GiftCardTransaction.belongsTo(GiftCard, { foreignKey: 'giftCardId' });
 
-User.belongsTo(Role, { foreignKey: 'roleId', as: 'roleData' });
-Role.hasMany(User, { foreignKey: 'roleId', as: 'users' });
+GiftCard.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+Customer.hasMany(GiftCard, { foreignKey: 'customerId', as: 'giftCards' });
+
+// Feedback Relationships
+Feedback.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+Order.hasOne(Feedback, { foreignKey: 'orderId', as: 'feedback' });
+
+Feedback.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+Customer.hasMany(Feedback, { foreignKey: 'customerId', as: 'feedbacks' });
+
+
 
 module.exports = {
     sequelize,
@@ -195,15 +183,27 @@ module.exports = {
     PurchaseOrderItem,
     PurchaseReturn,
     PurchaseReturnItem,
-    Wastage,
-    WastageItem,
     Outlet,
-
     Aggregator,
     SpecialNote,
-    POSDevice,
-    CashMovement,
-    StockTransaction,
+    PosDevice,
+    Expense,
+    ExpenseCategory,
+    Withdrawal,
+    WithdrawalCategory,
+    CashTopUp,
+    CashTopUpCategory,
     Customer,
-    Role
+    LoyaltyConfig,
+    LoyaltyTier,
+    CustomerLoyalty,
+    LoyaltyTransaction,
+    LoyaltyReward,
+    GiftCard,
+    GiftCardTransaction,
+    Feedback,
+    Subscription
 };
+
+
+

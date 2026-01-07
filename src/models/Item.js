@@ -135,15 +135,18 @@ const Item = sequelize.define('Item', {
     },
     showImage: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false
+        defaultValue: true
     },
-    autoSelectVariation: {
+    availableOndc: {
         type: DataTypes.BOOLEAN,
-        defaultValue: true,
-        comment: 'If true, auto-select first variation and show price. If false, require manual selection in modal.'
+        defaultValue: true
+    },
+    ondcTags: {
+        type: DataTypes.JSON,
+        allowNull: true
     },
     tenantId: {
-        type: DataTypes.UUID,
+        type: DataTypes.INTEGER,
         allowNull: true
     }
 });

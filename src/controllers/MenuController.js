@@ -1,30 +1,11 @@
 const { Category, Item, Variant, Addon, AddonGroup, VariationGroup, sequelize } = require('../models');
 
-// Helper to safely get tenantId
-const getTenantId = (req) => {
-    console.log('=== getTenantId Debug ===');
-    console.log('req.user:', req.user);
-    console.log('req.user?.tenantId:', req.user?.tenantId);
-    console.log('req.tenantId:', req.tenantId);
-
-    const tenantId = req.user?.tenantId || req.tenantId;
-
-    console.log('Extracted tenantId:', tenantId);
-
-    if (!tenantId) {
-        console.error('ERROR: Tenant ID not found in request!');
-        throw new Error('Tenant ID not found');
-    }
-    return tenantId;
-};
-
 // Categories
 // Categories
 exports.getCategories = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
         const categories = await Category.findAll({
-            where: { tenantId },
+            where: { tenantId: req.tenantId },
             order: [['sortOrder', 'ASC'], ['id', 'ASC']]
         });
         res.json(categories);
@@ -35,8 +16,7 @@ exports.getCategories = async (req, res) => {
 
 exports.createCategory = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        const category = await Category.create({ ...req.body, tenantId });
+        const category = await Category.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(category);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -45,8 +25,7 @@ exports.createCategory = async (req, res) => {
 
 exports.deleteCategory = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        await Category.destroy({ where: { id: req.params.id, tenantId } });
+        await Category.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Category deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -87,9 +66,8 @@ exports.reorderMenuItems = async (req, res) => {
 // Items
 exports.getItems = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
         const items = await Item.findAll({
-            where: { tenantId },
+            where: { tenantId: req.tenantId },
             include: [
                 Category,
                 {
@@ -129,11 +107,12 @@ exports.createItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         // When using FormData, complex fields like variants need parsing if sent as JSON strings
-        let { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
+        let { variants, addonGroupIds, variationGroupIds, ondcTags, ...itemData } = req.body;
 
         if (typeof variants === 'string') variants = JSON.parse(variants);
         if (typeof addonGroupIds === 'string') addonGroupIds = JSON.parse(addonGroupIds);
         if (typeof variationGroupIds === 'string') variationGroupIds = JSON.parse(variationGroupIds);
+        if (typeof ondcTags === 'string') ondcTags = JSON.parse(ondcTags);
 
         if (req.file) {
             itemData.image = `/uploads/${req.file.filename}`;
@@ -144,12 +123,12 @@ exports.createItem = async (req, res) => {
 
         // Clean up boolean fields coming as strings in FormData
         if (itemData.showImage === 'true') itemData.showImage = true;
-        else if (itemData.showImage === 'false') itemData.showImage = false;
-        else itemData.showImage = false; // Default to false
+        if (itemData.showImage === 'false') itemData.showImage = false;
+        if (itemData.availableOndc === 'true') itemData.availableOndc = true;
+        if (itemData.availableOndc === 'false') itemData.availableOndc = false;
 
         // Force Tenant ID
-        const tenantId = getTenantId(req);
-        itemData.tenantId = tenantId;
+        itemData.tenantId = req.tenantId;
 
         // Create Item
         const item = await Item.create(itemData, { transaction: t });
@@ -159,7 +138,7 @@ exports.createItem = async (req, res) => {
             const variantPromises = variants.map(v => Variant.create({
                 ...v,
                 itemId: item.id,
-                tenantId
+                tenantId: req.tenantId
             }, { transaction: t }));
             await Promise.all(variantPromises);
         }
@@ -178,7 +157,7 @@ exports.createItem = async (req, res) => {
 
         // Fetch complete item
         const completeItem = await Item.findOne({
-            where: { id: item.id, tenantId },
+            where: { id: item.id, tenantId: req.tenantId },
             include: [
                 Variant,
                 { model: AddonGroup, as: 'addonGroups' },
@@ -196,18 +175,12 @@ exports.updateItem = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        let { variants, addonGroupIds, variationGroupIds, ...itemData } = req.body;
-
-        // Safe tenantId extraction
-        const tenantId = req.user?.tenantId || req.tenantId;
-        if (!tenantId) {
-            await t.rollback();
-            return res.status(401).json({ error: 'Tenant ID not found' });
-        }
+        let { variants, addonGroupIds, variationGroupIds, ondcTags, ...itemData } = req.body;
 
         if (typeof variants === 'string') variants = JSON.parse(variants);
         if (typeof addonGroupIds === 'string') addonGroupIds = JSON.parse(addonGroupIds);
         if (typeof variationGroupIds === 'string') variationGroupIds = JSON.parse(variationGroupIds);
+        if (typeof ondcTags === 'string') ondcTags = JSON.parse(ondcTags);
 
         if (req.file) {
             itemData.image = `/uploads/${req.file.filename}`;
@@ -217,10 +190,11 @@ exports.updateItem = async (req, res) => {
 
         // Clean up boolean fields coming as strings in FormData
         if (itemData.showImage === 'true') itemData.showImage = true;
-        else if (itemData.showImage === 'false') itemData.showImage = false;
-        // Default remains unchanged for update if not provided in req.body
+        if (itemData.showImage === 'false') itemData.showImage = false;
+        if (itemData.availableOndc === 'true') itemData.availableOndc = true;
+        if (itemData.availableOndc === 'false') itemData.availableOndc = false;
 
-        const item = await Item.findOne({ where: { id, tenantId } });
+        const item = await Item.findOne({ where: { id, tenantId: req.tenantId } });
         if (!item) {
             await t.rollback();
             return res.status(404).json({ error: 'Item not found' });
@@ -231,12 +205,12 @@ exports.updateItem = async (req, res) => {
 
         // Handle Variants: Replace strategy
         if (variants) {
-            await Variant.destroy({ where: { itemId: id, tenantId }, transaction: t });
+            await Variant.destroy({ where: { itemId: id, tenantId: req.tenantId }, transaction: t });
             if (Array.isArray(variants) && variants.length > 0) {
                 const variantPromises = variants.map(v => Variant.create({
                     ...v,
                     itemId: id,
-                    tenantId
+                    tenantId: req.tenantId
                 }, { transaction: t }));
                 await Promise.all(variantPromises);
             }
@@ -255,7 +229,7 @@ exports.updateItem = async (req, res) => {
         await t.commit();
 
         const updatedItem = await Item.findOne({
-            where: { id, tenantId },
+            where: { id, tenantId: req.tenantId },
             include: [
                 Variant,
                 { model: AddonGroup, as: 'addonGroups' },
@@ -271,8 +245,7 @@ exports.updateItem = async (req, res) => {
 
 exports.deleteItem = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        await Item.destroy({ where: { id: req.params.id, tenantId } });
+        await Item.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Item deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -283,8 +256,7 @@ exports.updateItemStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body; // e.g. { availableOffline: false }
-        const tenantId = getTenantId(req);
-        const item = await Item.findOne({ where: { id, tenantId } });
+        const item = await Item.findOne({ where: { id, tenantId: req.tenantId } });
         if (!item) return res.status(404).json({ error: 'Item not found' });
 
         await item.update(updates);
@@ -740,9 +712,8 @@ exports.exportFullMenu = async (req, res) => {
 // Variants
 exports.getVariants = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
         const variants = await Variant.findAll({
-            where: { tenantId },
+            where: { tenantId: req.tenantId },
             include: Item
         });
         res.json(variants);
@@ -753,8 +724,7 @@ exports.getVariants = async (req, res) => {
 
 exports.createVariant = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        const variant = await Variant.create({ ...req.body, tenantId });
+        const variant = await Variant.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(variant);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -763,8 +733,7 @@ exports.createVariant = async (req, res) => {
 
 exports.deleteVariant = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        await Variant.destroy({ where: { id: req.params.id, tenantId } });
+        await Variant.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Variant deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -774,8 +743,7 @@ exports.deleteVariant = async (req, res) => {
 // Addons
 exports.getAddons = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        const addons = await Addon.findAll({ where: { tenantId } });
+        const addons = await Addon.findAll({ where: { tenantId: req.tenantId } });
         res.json(addons);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -784,8 +752,7 @@ exports.getAddons = async (req, res) => {
 
 exports.createAddon = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        const addon = await Addon.create({ ...req.body, tenantId });
+        const addon = await Addon.create({ ...req.body, tenantId: req.tenantId });
         res.status(201).json(addon);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -794,8 +761,7 @@ exports.createAddon = async (req, res) => {
 
 exports.deleteAddon = async (req, res) => {
     try {
-        const tenantId = getTenantId(req);
-        await Addon.destroy({ where: { id: req.params.id, tenantId } });
+        await Addon.destroy({ where: { id: req.params.id, tenantId: req.tenantId } });
         res.json({ message: 'Addon deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });

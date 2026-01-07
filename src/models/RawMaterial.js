@@ -132,16 +132,6 @@ const RawMaterial = sequelize.define('RawMaterial', {
         defaultValue: 0
     },
 
-    // Daily Opening Stock Snapshot
-    openingStock: {
-        type: DataTypes.FLOAT,
-        defaultValue: 0
-    },
-    lastStockUpdateDate: {
-        type: DataTypes.DATEONLY, // Format: YYYY-MM-DD
-        allowNull: true
-    },
-
     // Excise Report
     exciseQty: {
         type: DataTypes.FLOAT,

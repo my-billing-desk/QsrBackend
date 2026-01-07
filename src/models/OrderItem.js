@@ -15,10 +15,6 @@ const OrderItem = sequelize.define('OrderItem', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
-    variantId: {
-        type: DataTypes.INTEGER,
-        allowNull: true
-    },
     itemName: { // Snapshot in case item changes
         type: DataTypes.STRING,
         allowNull: false
@@ -35,6 +31,10 @@ const OrderItem = sequelize.define('OrderItem', {
         type: DataTypes.FLOAT,
         allowNull: false
     },
+    variantId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     variantName: {
         type: DataTypes.STRING,
         allowNull: true
@@ -49,7 +49,7 @@ const OrderItem = sequelize.define('OrderItem', {
     }
     ,
     tenantId: {
-        type: DataTypes.UUID,
+        type: DataTypes.INTEGER,
         allowNull: true
     }
 });

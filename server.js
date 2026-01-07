@@ -6,10 +6,6 @@ const { sequelize } = require('./src/models'); // Using the models index for rel
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Body Parsers (MUST BE BEFORE LOGGER to log body)
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 // Routes Import
 const menuRoutes = require('./src/routes/menuRoutes');
 const orderRoutes = require('./src/routes/orderRoutes');
@@ -22,11 +18,15 @@ const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const aggregatorRoutes = require('./src/routes/aggregatorRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
 const specialNoteRoutes = require('./src/routes/specialNoteRoutes');
+
 const onboardingRoutes = require('./src/routes/onboardingRoutes');
 const posDeviceRoutes = require('./src/routes/posDeviceRoutes');
-const cashMovementRoutes = require('./src/routes/cashMovementRoutes');
+const loyaltyRoutes = require('./src/routes/loyaltyRoutes');
+const giftCardRoutes = require('./src/routes/giftCardRoutes');
+const feedbackRoutes = require('./src/routes/feedbackRoutes');
 const customerRoutes = require('./src/routes/customerRoutes');
-const roleRoutes = require('./src/routes/roleRoutes');
+const ondcRoutes = require('./src/routes/ondcRoutes');
+const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
 
 // Middleware
 // Explicit manual CORS
@@ -41,13 +41,6 @@ app.options('*', cors());
 // Debug Logger
 app.use((req, res, next) => {
     console.log(`[DEBUG] Method: ${req.method}, URL: ${req.url}, Path: ${req.path}`);
-    if (Object.keys(req.body).length > 0) {
-        // Create a copy to sanitize
-        const bodyLog = { ...req.body };
-        if (bodyLog.password) bodyLog.password = '***';
-        if (bodyLog.passcode) bodyLog.passcode = '***';
-        console.log(`[DEBUG] Body: ${JSON.stringify(bodyLog)}`);
-    }
     next();
 });
 
@@ -61,6 +54,7 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
 const passport = require('./src/config/passport');
@@ -87,9 +81,13 @@ mount('/reports', reportRoutes);
 mount('/special-notes', specialNoteRoutes);
 mount('/onboarding', onboardingRoutes);
 mount('/pos-devices', posDeviceRoutes);
-mount('/cash-movements', cashMovementRoutes);
+mount('/loyalty', loyaltyRoutes);
+mount('/gift-cards', giftCardRoutes);
+mount('/feedback', feedbackRoutes);
 mount('/customers', customerRoutes);
-mount('/roles', roleRoutes);
+mount('/ondc', ondcRoutes);
+mount('/subscriptions', subscriptionRoutes);
+mount('/financial', require('./src/routes/financialRoutes'));
 
 app.get('/', (req, res) => {
     res.json({ message: 'QSR Backend API is running (Root)' });
@@ -103,7 +101,17 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
-
+// Catch-all for debugging
+app.all('*', (req, res) => {
+    console.log(`[404] Route not found: ${req.url}`);
+    res.status(404).json({
+        error: 'Route not found',
+        url: req.url,
+        path: req.path,
+        method: req.method,
+        note: 'This is a custom 404 from Express'
+    });
+});
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -123,67 +131,9 @@ let dbReady = false;
 sequelize.sync().then(() => {
     console.log('Database synced');
     dbReady = true;
-
-    // Trial Cleanup Job
-    const cleanupTrials = async () => {
-        try {
-            const { Tenant } = require('./src/models');
-            const { Op } = require('sequelize');
-
-            const cleanupDate = new Date();
-            cleanupDate.setDate(cleanupDate.getDate() - 14); // 7 days trial + 7 days grace
-
-            const tenantsToDelete = await Tenant.findAll({
-                where: {
-                    [Op.or]: [
-                        {
-                            // Logic A: createdAt based (fallback/legacy)
-                            createdAt: { [Op.lt]: cleanupDate },
-                            subscriptionExpiryDate: null,
-                            status: { [Op.in]: ['trial', 'onboard_pending'] }
-                        },
-                        {
-                            // Logic B: subscriptionExpiryDate based
-                            subscriptionExpiryDate: { [Op.lt]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000) }, // Expired + 7 days grace
-                            status: { [Op.in]: ['trial', 'onboard_pending'] }
-                        }
-                    ]
-                }
-            });
-
-            if (tenantsToDelete.length > 0) {
-                console.log(`[CLEANUP] Found ${tenantsToDelete.length} expired tenants to delete.`);
-                for (const t of tenantsToDelete) {
-                    console.log(`[CLEANUP] Deleting tenant ${t.id} (${t.name})`);
-                    // Use force: true to ignore soft deletes if enabled, though not enabled by default
-                    await t.destroy({ force: true });
-                }
-            }
-        } catch (e) {
-            console.error('[CLEANUP] Error cleaning up expired trials:', e);
-        }
-    };
-
-    // Run cleanup on start and every 24h
-    cleanupTrials();
-    setInterval(cleanupTrials, 24 * 60 * 60 * 1000);
-
-    // DB Readiness Middleware (optional, or just let it fail)
     if (require.main === module) {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
-        });
-
-        // Catch-all for debugging (MOVED TO END)
-        app.all('*', (req, res) => {
-            console.log(`[404] Route not found: ${req.url}`);
-            res.status(404).json({
-                error: 'Route not found',
-                url: req.url,
-                path: req.path,
-                method: req.method,
-                note: 'This is a custom 404 from Express'
-            });
         });
     }
 }).catch(err => {

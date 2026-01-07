@@ -28,11 +28,7 @@ const Purchase = sequelize.define('Purchase', {
         defaultValue: 'Unpaid' // Paid, Unpaid, Partial
     },
     paymentType: {
-        type: DataTypes.STRING, // Cash, Bank
-        allowNull: true
-    },
-    transactionNumber: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING, // Cash, Card, UPI, etc.
         allowNull: true
     },
     // Amounts
@@ -45,10 +41,6 @@ const Purchase = sequelize.define('Purchase', {
         defaultValue: 0
     },
     otherCharges: {
-        type: DataTypes.FLOAT,
-        defaultValue: 0
-    },
-    deliveryCharges: {
         type: DataTypes.FLOAT,
         defaultValue: 0
     },

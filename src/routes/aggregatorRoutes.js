@@ -1,15 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const aggregatorController = require('../controllers/AggregatorController');
+const aggregatorController = require('../controllers/aggregatorController');
 
-const { protect, authorize } = require('../middleware/authMiddleware');
-
-const aggManagers = ['super_admin', 'admin', 'restaurant_manager'];
+const { protect } = require('../middleware/authMiddleware');
 
 router.get('/', protect, aggregatorController.getAll);
-router.post('/:id/toggle', protect, authorize(...aggManagers), aggregatorController.updateSettings);
-router.post('/:id/verify', protect, authorize(...aggManagers), aggregatorController.verify);
+router.post('/sync', protect, aggregatorController.syncMarketplace);
+router.post('/:id/toggle', protect, aggregatorController.toggleStatus);
+router.post('/:id/verify', protect, aggregatorController.verify);
 router.post('/webhook', aggregatorController.webhook);
-router.post('/ondc/confirm', aggregatorController.ondcWebhook);
 
 module.exports = router;

@@ -113,15 +113,44 @@ exports.createOrder = async (req, res) => {
         let calculatedTotal = 0;
         const activeTotal = orderData.totalAmount;
 
-        // Handle Split Payment Storage
-        if (orderData.splits && Array.isArray(orderData.splits)) {
-            orderData.paymentDetails = JSON.stringify(orderData.splits);
-        } else if (typeof orderData.paymentDetails === 'object') {
-            orderData.paymentDetails = JSON.stringify(orderData.paymentDetails);
-        }
-
         // Create Order
         const order = await Order.create({ ...orderData, tenantId: req.tenantId });
+
+        // Update Customer Stats
+        if (orderData.customerId) {
+            const { Customer } = require('../models');
+            const customer = await Customer.findByPk(orderData.customerId);
+            if (customer) {
+                await customer.update({
+                    totalSpend: parseFloat(customer.totalSpend) + parseFloat(orderData.totalAmount),
+                    totalOrders: customer.totalOrders + 1,
+                    lastVisit: new Date()
+                });
+            }
+        }
+
+        // Handle Gift Card Payment
+        if (orderData.paymentMode === 'Gift Card' && orderData.giftCardNumber) {
+            const { GiftCard, GiftCardTransaction } = require('../models');
+            const card = await GiftCard.findOne({
+                where: { cardNumber: orderData.giftCardNumber, tenantId: req.tenantId }
+            });
+
+            if (card && card.balance >= orderData.totalAmount) {
+                await card.decrement('balance', { by: orderData.totalAmount });
+                await GiftCardTransaction.create({
+                    giftCardId: card.id,
+                    type: 'redemption',
+                    amount: orderData.totalAmount,
+                    orderId: order.id,
+                    tenantId: req.tenantId
+                });
+            } else {
+                // If card not found or insufficient balance, we might want to flag the order or throw error
+                // For now, just log it. In a real scenario, this should be validated before order creation.
+                console.error('Gift card payment failed: Insufficient balance or card not found');
+            }
+        }
 
         // Create Order Items
         if (items && items.length > 0) {
@@ -133,23 +162,10 @@ exports.createOrder = async (req, res) => {
 
             await OrderItem.bulkCreate(orderItems);
 
-            // NEW: Use improved inventory deduction service
-            try {
-                const inventoryDeductionService = require('../services/inventoryDeductionService');
-                const deductionResult = await inventoryDeductionService.deductInventoryForOrder({
-                    id: order.id,
-                    items: items
-                }, req.user?.id);
-
-                // Log warnings if any
-                if (deductionResult.warnings && deductionResult.warnings.length > 0) {
-                    console.warn('Low stock warnings:', deductionResult.warnings);
-                    // Could emit WebSocket event here for real-time alerts
-                }
-            } catch (stockError) {
-                console.error('Inventory deduction failed:', stockError);
-                // Don't block order creation, but log the error
-            }
+            // Trigger Stock Consumption
+            // We pass the original 'items' from request as they contain itemId/variantId
+            // The orderItems constructed above might lose some props if not careful, but 'items' has everything needed.
+            await consumeStock(items);
 
             // Update total amount only if not provided by client (to preserve tax/packing logic from POS)
             if (activeTotal === undefined || activeTotal === null) {
@@ -163,7 +179,14 @@ exports.createOrder = async (req, res) => {
             include: [{ model: OrderItem, as: 'items' }]
         });
 
+        // Trigger Loyalty Processing if order is completed
+        if (order.status === 'completed') {
+            const { processOrderLoyalty } = require('./LoyaltyController');
+            processOrderLoyalty(order.id, req.tenantId);
+        }
+
         res.status(201).json(createdOrder);
+
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -227,11 +250,12 @@ exports.updateOrder = async (req, res) => {
             }
         }
 
-        // Return updated order with items
-        const updatedOrder = await Order.findOne({
-            where: { id, tenantId: req.tenantId },
-            include: [{ model: OrderItem, as: 'items' }]
-        });
+        // Trigger Loyalty Processing if order is completed
+        if (updateData.status === 'completed') {
+            const { processOrderLoyalty } = require('./LoyaltyController');
+            // We don't await this to keep response fast, it runs in background
+            processOrderLoyalty(id, req.tenantId);
+        }
 
         res.json(updatedOrder);
     } catch (error) {

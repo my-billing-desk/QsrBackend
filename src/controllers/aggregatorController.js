@@ -1,210 +1,149 @@
-const { Aggregator, Order, OrderItem } = require('../models');
+const { Aggregator } = require('../models');
 
-exports.updateSettings = async (req, res) => {
+exports.getAll = async (req, res) => {
+    try {
+        const aggregators = await Aggregator.findAll({ where: { tenantId: req.tenantId } });
+        res.json(aggregators);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching aggregators", error });
+    }
+};
+
+exports.toggleStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { autoAccept, autoMarkReadyTime, isConnected, apiKey, merchantId } = req.body;
-
-        const aggregator = await Aggregator.findOne({ where: { id, tenantId: req.user.tenantId } });
+        const aggregator = await Aggregator.findOne({ where: { id, tenantId: req.tenantId } });
         if (!aggregator) return res.status(404).json({ message: "Aggregator not found" });
 
-        if (autoAccept !== undefined) aggregator.autoAccept = autoAccept;
-        if (autoMarkReadyTime !== undefined) aggregator.autoMarkReadyTime = autoMarkReadyTime;
-        if (isConnected !== undefined) aggregator.isConnected = isConnected;
+        // Update fields if provided
+        const { apiKey, merchantId, subscriberId, ukId, signingPublicKey, encryptionPublicKey, privateKey, bppUri, cityCode, domain } = req.body;
         if (apiKey !== undefined) aggregator.apiKey = apiKey;
         if (merchantId !== undefined) aggregator.merchantId = merchantId;
+        if (subscriberId !== undefined) aggregator.subscriberId = subscriberId;
+        if (ukId !== undefined) aggregator.ukId = ukId;
+        if (signingPublicKey !== undefined) aggregator.signingPublicKey = signingPublicKey;
+        if (encryptionPublicKey !== undefined) aggregator.encryptionPublicKey = encryptionPublicKey;
+        if (privateKey !== undefined) aggregator.privateKey = privateKey;
+        if (bppUri !== undefined) aggregator.bppUri = bppUri;
+        if (cityCode !== undefined) aggregator.cityCode = cityCode;
+        if (domain !== undefined) aggregator.domain = domain;
 
-        // If credentials changed, reset verification
-        if (apiKey || merchantId) {
-            aggregator.verificationStatus = 'pending';
-            aggregator.isConnected = false;
+        // If no specific fields toggled, just toggle connection
+        if (Object.keys(req.body).length === 0 || (Object.keys(req.body).length === 1 && req.body.hasOwnProperty('id'))) {
+            aggregator.isConnected = !aggregator.isConnected;
+        } else {
+            // If fields were provided, we usually want it connected
+            aggregator.isConnected = true;
         }
 
         await aggregator.save();
-        res.json({ message: "Settings updated successfully", aggregator });
+
+        res.json({ message: "Status and configuration updated", aggregator });
     } catch (error) {
-        res.status(500).json({ message: "Error updating settings", error: error.message });
+        res.status(500).json({ message: "Error updating aggregator", error });
     }
 };
 
 exports.verify = async (req, res) => {
     try {
         const { id } = req.params;
-        const aggregator = await Aggregator.findOne({ where: { id, tenantId: req.user.tenantId } });
-
+        const aggregator = await Aggregator.findOne({ where: { id, tenantId: req.tenantId } });
         if (!aggregator) return res.status(404).json({ message: "Aggregator not found" });
-        if (!aggregator.apiKey || !aggregator.merchantId) {
-            return res.status(400).json({ message: "API Key and Merchant ID are required for verification" });
-        }
 
-        console.log(`[REALTIME_API] Verifying ${aggregator.name} for Merchant: ${aggregator.merchantId}`);
+        // Simulate verification logic
+        aggregator.isConnected = true;
+        aggregator.verificationStatus = 'verified';
+        await aggregator.save();
 
-        // Simulate Real API Handshake
-        // In reality, this would be: axios.post('swiggy-api/verify', { key: aggregator.apiKey, mid: aggregator.merchantId })
-        const isVerified = aggregator.apiKey.length > 5 && aggregator.merchantId.length > 3;
-
-        if (isVerified) {
-            aggregator.verificationStatus = 'verified';
-            aggregator.isConnected = true;
-            await aggregator.save();
-            res.json({ success: true, message: `${aggregator.name} Verified Successfully. Integration is now LIVAE.`, aggregator });
-        } else {
-            aggregator.verificationStatus = 'failed';
-            aggregator.isConnected = false;
-            await aggregator.save();
-            res.status(400).json({ success: false, message: "Invalid credentials. Please contact aggregator support.", aggregator });
-        }
+        res.json({ success: true, message: `${aggregator.name} verification successful!` });
     } catch (error) {
-        res.status(500).json({ message: "Verification failed", error: error.message });
+        res.status(500).json({ message: "Verification failed", error });
     }
 };
 
-exports.getAll = async (req, res) => {
+exports.syncMarketplace = async (req, res) => {
+    const { Subscription } = require('../models');
     try {
-        const aggregators = await Aggregator.findAll({ where: { tenantId: req.user.tenantId } });
-        res.json(aggregators);
+        const tenantId = req.tenantId;
+
+        if (!tenantId) {
+            console.error("Sync Error: No tenantId in request");
+            return res.status(400).json({ error: "Tenant ID required for sync" });
+        }
+
+        console.log(`Syncing marketplace for tenant: ${tenantId}`);
+
+        // Default Aggregators
+        const defaultAggs = [
+            { name: 'ONDC', slug: 'ondc', category: 'Online Orders', icon: 'https://upload.wikimedia.org/wikipedia/commons/2/29/ONDC_Official_Logo.svg' },
+            { name: 'Zomato', slug: 'zomato', category: 'Online Orders', icon: 'https://upload.wikimedia.org/wikipedia/commons/b/bd/Zomato_Logo.svg' },
+            { name: 'Swiggy', slug: 'swiggy', category: 'Online Orders', icon: 'https://upload.wikimedia.org/wikipedia/en/1/12/Swiggy_logo.svg' }
+        ];
+
+        for (const agg of defaultAggs) {
+            await Aggregator.findOrCreate({
+                where: { slug: agg.slug, tenantId },
+                defaults: { ...agg, tenantId }
+            });
+        }
+
+        // Default Subscriptions
+        const defaultSubs = [
+            { serviceName: 'Scan & Order', slug: 'scan-order', category: 'Active Subscription', price: 4500, iconName: 'qrcode', badge: 'Active' },
+            { serviceName: 'WhatsApp Alerts', slug: 'whatsapp', category: 'Active Subscription', price: 1000, iconName: 'message', badge: 'Active' },
+            { serviceName: 'POS Subscription', slug: 'pos', category: 'Active Subscription', price: 7000, iconName: 'monitor', badge: 'Active' },
+            { serviceName: 'Inventory Application', slug: 'inventory', category: 'Easy Operations', price: 0, iconName: 'layers', badge: 'Activated', status: 'active' },
+            { serviceName: 'Kitchen Display System (KDS)', slug: 'kds', category: 'Easy Operations', price: 0, iconName: 'monitor', badge: '7 Days Free', status: 'available' },
+            { serviceName: 'Captain Application', slug: 'captain', category: 'Easy Operations', price: 0, iconName: 'users', badge: 'Explore Now', status: 'available' }
+        ];
+
+        for (const sub of defaultSubs) {
+            await Subscription.findOrCreate({
+                where: { slug: sub.slug, tenantId },
+                defaults: { ...sub, tenantId }
+            });
+        }
+
+        console.log(`Sync completed for tenant: ${tenantId}`);
+        res.json({ success: true, message: "Marketplace synced successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching aggregators", error: error.message });
+        console.error("Sync Error Details:", error);
+        res.status(500).json({ error: "Sync failed", details: error.message });
     }
 };
 
 exports.webhook = async (req, res) => {
+    const { Order, OrderItem } = require('../models');
     try {
-        const { source, items, customer, totalAmount, tenantId } = req.body;
-
-        let resolvedTenantId = tenantId;
-
-        // Find the aggregator to check settings
-        const aggregator = await Aggregator.findOne({
-            where: {
-                slug: source.toLowerCase()
-            }
-        });
-
-        if (aggregator && !resolvedTenantId) {
-            resolvedTenantId = aggregator.tenantId;
-        }
+        // Expected payload: { source: 'Swiggy', items: [{ name: 'Burger', price: 100, quantity: 1 }], customer: { name: 'John' } }
+        const { source, items, customer, totalAmount } = req.body;
 
         const orderNum = `${source.toUpperCase().substring(0, 3)}-${Date.now().toString().slice(-6)}`;
-
-        const status = (aggregator && aggregator.autoAccept) ? 'preparing' : 'placed';
 
         const newOrder = await Order.create({
             orderNumber: orderNum,
             source: source || 'Online',
             type: 'delivery',
-            status: status,
-            paymentStatus: 'paid',
+            status: 'placed',
+            paymentStatus: 'paid', // Online orders are usually prepaid or COD
             totalAmount: totalAmount || 0,
             customerName: customer?.name || 'Guest',
             customerPhone: customer?.phone || '',
-            paymentMode: 'Online',
-            tenantId: resolvedTenantId
+            paymentMode: 'Online'
         });
 
-        // Handle Mark Ready Auto logic (Simulated here for now)
-        if (aggregator && aggregator.autoMarkReadyTime > 0 && status === 'preparing') {
-            console.log(`[REALTIME_DEBUG] Scheduling auto-ready for order ${newOrder.id} in ${aggregator.autoMarkReadyTime} minutes`);
-            // In a production app, use a queue like BullMQ or a simple setTimeout for small scale
-            setTimeout(async () => {
-                const o = await Order.findByPk(newOrder.id);
-                if (o && o.status === 'preparing') {
-                    o.status = 'served'; // 'served' is our 'ready' equivalent in this schema
-                    await o.save();
-                    console.log(`[REALTIME_DEBUG] Order ${newOrder.id} marked ready automatically.`);
-                }
-            }, aggregator.autoMarkReadyTime * 60000);
+        if (items && items.length > 0) {
+            // This is a simplified logic. In real app, we would look up Item IDs.
+            // For now, we accept arbitrary items for simulation if Item ID is not critical for simple display.
+            // However, OrderItem usually links to Item.
+            // Let's assume we just want to create the Order header for the notification mostly.
+            // To actually show items, we need to map them.
+            // We'll skip complex mapping for this basic "Integration" step unless requested.
         }
 
-        res.status(200).json({ success: true, orderId: newOrder.id, message: "Order processed" });
+        res.status(200).json({ success: true, orderId: newOrder.id, message: "Order received via Webhook" });
     } catch (error) {
         console.error("Webhook Error:", error);
         res.status(500).json({ message: "Error processing webhook", error: error.message });
-    }
-};
-
-exports.ondcWebhook = async (req, res) => {
-    try {
-        const { context, message } = req.body;
-        console.log('[ONDC_WEBHOOK] Received Payload:', JSON.stringify(req.body, null, 2));
-
-        // Basic Beckn Protocol Validation
-        if (!context || !message || !message.order) {
-            return res.status(400).json({
-                message: {
-                    ack: { status: "NACK" }
-                },
-                error: { message: "Invalid ONDC Payload Structure" }
-            });
-        }
-
-        // 1. Identify Tenant/Outlet from Provider ID
-        // ONDC 'provider.id' usually maps to our system's Merchant ID
-        const providerId = message.order.provider ? message.order.provider.id : null;
-
-        let aggregator = await Aggregator.findOne({
-            where: { merchantId: providerId }
-        });
-
-        // Fallback: If no provider match (simulation), look for generic 'ondc' aggregator
-        if (!aggregator) {
-            aggregator = await Aggregator.findOne({ where: { slug: 'ondc' } });
-        }
-
-        if (!aggregator) {
-            console.error('[ONDC_WEBHOOK] Aggregator configuration not found for ONDC/Provider');
-            return res.status(400).json({ message: { ack: { status: "NACK" } }, error: { message: "Store not configured for ONDC" } });
-        }
-
-        const orderDetails = message.order;
-        const billing = orderDetails.billing || {};
-        const quote = orderDetails.quote || {};
-
-        // 2. Map Status
-        // ONDC States: Created, Accepted, In-progress, Completed, Cancelled
-        let internalStatus = 'placed';
-        if (orderDetails.state === 'In-progress') internalStatus = 'preparing';
-        if (aggregator.autoAccept && internalStatus === 'placed') internalStatus = 'preparing';
-
-        const orderNum = orderDetails.id || `ONDC-${Date.now()}`;
-
-        // 3. Create Order
-        const newOrder = await Order.create({
-            orderNumber: orderNum,
-            source: 'ONDC',
-            type: 'delivery', // ONDC is primarily delivery
-            status: internalStatus,
-            paymentStatus: orderDetails.payment && orderDetails.payment.status === 'PAID' ? 'paid' : 'pending',
-            totalAmount: parseFloat(quote.price?.value || 0),
-            customerName: billing.name || 'ONDC User',
-            customerPhone: billing.phone || '',
-            paymentMode: 'Online',
-            tenantId: aggregator.tenantId
-        });
-
-        console.log(`[ONDC_WEBHOOK] Order Created: ${newOrder.id} for Tenant: ${aggregator.tenantId}`);
-
-        // 4. Return ACK (Beckn Standard)
-        res.status(200).json({
-            context: {
-                ...context,
-                timestamp: new Date().toISOString(),
-                action: 'on_confirm'
-            },
-            message: {
-                ack: {
-                    status: "ACK"
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error('[ONDC_WEBHOOK] Error:', error);
-        res.status(500).json({
-            message: {
-                ack: { status: "NACK" }
-            },
-            error: { message: error.message }
-        });
     }
 };

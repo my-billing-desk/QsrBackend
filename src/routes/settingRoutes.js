@@ -2,11 +2,9 @@ const express = require('express');
 const router = express.Router();
 const SettingsController = require('../controllers/SettingsController');
 
-const { protect, authorize } = require('../middleware/authMiddleware');
-
-const admins = ['super_admin', 'admin', 'zone_manager'];
+const { protect } = require('../middleware/authMiddleware');
 
 router.get('/', protect, SettingsController.getSettings);
-router.post('/', protect, authorize(...admins), SettingsController.updateSettings);
+router.post('/', protect, SettingsController.updateSettings);
 
 module.exports = router;

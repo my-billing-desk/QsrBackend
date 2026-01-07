@@ -17,17 +17,22 @@ const Tenant = sequelize.define('Tenant', {
         allowNull: true
     },
     status: {
-        type: DataTypes.ENUM('active', 'inactive', 'suspended', 'trial', 'onboard_pending'),
+        type: DataTypes.ENUM('active', 'inactive', 'suspended'),
         defaultValue: 'active'
     },
     subscriptionPlan: {
         type: DataTypes.ENUM('starter', 'pro', 'enterprise'),
         defaultValue: 'starter'
     },
-    subscriptionExpiryDate: {
+    otp: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    otpExpiresAt: {
         type: DataTypes.DATE,
         allowNull: true
     }
+
 });
 
 module.exports = Tenant;
