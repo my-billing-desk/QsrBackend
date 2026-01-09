@@ -7,6 +7,7 @@ const User = require('./User');
 const Variant = require('./Variant');
 const Addon = require('./Addon');
 const Aggregator = require('./Aggregator');
+const Table = require('./Table');
 const Tax = require('./Tax');
 const SpecialNote = require('./SpecialNote');
 const PosDevice = require('./PosDevice');
@@ -165,6 +166,7 @@ module.exports = {
     User,
     Variant,
     Addon,
+    Table,
     Tax,
     Discount,
     Setting,
