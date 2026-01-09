@@ -101,6 +101,9 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
+// Ping route for health check (DB independent)
+app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.status(200).send('pong'));
+
 // Catch-all for debugging
 app.all('*', (req, res) => {
     console.log(`[404] Route not found: ${req.url}`);
@@ -123,8 +126,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Ping route for health check (DB independent)
-app.get([/\/ping$/, '/ping', '/api/ping', '/server/ping'], (req, res) => res.status(200).send('pong'));
+
 
 // Sync Database
 let dbReady = false;

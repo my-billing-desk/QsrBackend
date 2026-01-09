@@ -36,6 +36,7 @@ const Outlet = sequelize.define('Outlet', {
     taxAuthorityName: { type: DataTypes.STRING, defaultValue: 'GST' },
     outletServingType: { type: DataTypes.STRING }, // Service, Goods, Both
     enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true },
+    enableTables: { type: DataTypes.BOOLEAN, defaultValue: true },
 
     // Theme Configuration
     themeName: { type: DataTypes.STRING, defaultValue: 'Emerald & Slate (Light)' },

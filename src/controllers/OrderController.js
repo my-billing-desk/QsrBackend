@@ -62,8 +62,12 @@ exports.getOrders = async (req, res) => {
 
         // Date Range Filter
         if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
             whereClause.createdAt = {
-                [Op.between]: [new Date(startDate), new Date(endDate)]
+                [Op.between]: [start, end]
             };
         } else if (startDate) {
             whereClause.createdAt = { [Op.gte]: new Date(startDate) };
@@ -250,14 +254,14 @@ exports.updateOrder = async (req, res) => {
             }
         }
 
-        // Trigger Loyalty Processing if order is completed
-        if (updateData.status === 'completed') {
+        // Check if loyalty processing is needed
+        if (updateData.status === 'completed' || order.status === 'completed') {
             const { processOrderLoyalty } = require('./LoyaltyController');
-            // We don't await this to keep response fast, it runs in background
             processOrderLoyalty(id, req.tenantId);
         }
 
-        res.json(updatedOrder);
+        const refreshed = await Order.findByPk(id, { include: [{ model: OrderItem, as: 'items' }] });
+        res.json(refreshed);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

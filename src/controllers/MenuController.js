@@ -90,11 +90,11 @@ exports.getItems = async (req, res) => {
                 ['rank', 'ASC'],
                 ['id', 'ASC'],
                 [Variant, 'sortOrder', 'ASC'],
-                [Variant, 'id', 'ASC'],
-                [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'sortOrder', 'ASC'],
-                [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'id', 'ASC'],
-                [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'sortOrder', 'ASC'],
-                [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'id', 'ASC']
+                [Variant, 'id', 'ASC']
+                // [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'sortOrder', 'ASC'],
+                // [{ model: VariationGroup, as: 'variationGroups' }, { model: Variant }, 'id', 'ASC'],
+                // [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'sortOrder', 'ASC'],
+                // [{ model: AddonGroup, as: 'addonGroups' }, { model: Addon }, 'id', 'ASC']
             ]
         });
         res.json(items);
