@@ -8,5 +8,6 @@ router.get('/stats', protect, dashboardController.getStats);
 router.get('/charts', protect, dashboardController.getCharts);
 router.get('/recent-orders', protect, dashboardController.getRecentOrders);
 router.get('/top-items', protect, dashboardController.getTopItems);
+router.get('/sales-breakdown', protect, dashboardController.getSalesBreakdown);
 
 module.exports = router;
