@@ -27,9 +27,9 @@ const Wastage = sequelize.define('Wastage', {
         type: DataTypes.STRING,
         allowNull: true
     }
-,
+    ,
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });

@@ -1,4 +1,4 @@
-const { Order, OrderItem, Purchase, Aggregator, Wastage, Withdrawal, Item, Category, sequelize } = require('../models');
+const { Order, OrderItem, Purchase, Aggregator, Wastage, Withdrawal, Item, Category, Expense, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 function timeSince(date) {
@@ -197,13 +197,21 @@ exports.getStats = async (req, res) => {
 
 
 
-        const expenses = await Purchase.findAll({
+        const purchaseRecords = await Purchase.findAll({
             where: {
                 createdAt: { [Op.between]: [queryStart, queryEnd] },
                 tenantId: req.tenantId
             }
         });
-        const totalExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.grandTotal) || 0), 0);
+        const totalPurchases = purchaseRecords.reduce((sum, p) => sum + (parseFloat(p.grandTotal) || 0), 0);
+
+        const expenseRecords = await Expense.findAll({
+            where: {
+                date: { [Op.between]: [queryStart, queryEnd] },
+                tenantId: req.tenantId
+            }
+        });
+        const totalExpensesValue = expenseRecords.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
         res.json({
             totalIncome,
@@ -239,11 +247,10 @@ exports.getStats = async (req, res) => {
             },
             taxStats,
             expenseStats: {
-                totalExpenses,
+                totalExpenses: totalExpensesValue,
+                totalPurchases: totalPurchases,
                 withdrawal: cashDeposit,
-                detailed: expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0) // Fix: expenses uses 'amount' not 'grandTotal' based on Expense model? Wait, line 133 uses Purchase model.
-                // The original code at line 133 fetches PURCHASES as 'expenses'. That's COGS.
-                // Real Expenses are in Expense model.
+                detailed: totalExpensesValue + totalPurchases
             }
         });
 

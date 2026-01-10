@@ -1,4 +1,5 @@
 const { Order, OrderItem, Recipe, RecipeIngredient, RawMaterial, Setting } = require('../models');
+const { sendOTPEmail } = require('../utils/emailHelper');
 
 const { Op } = require('sequelize');
 
@@ -56,7 +57,7 @@ const consumeStock = async (items) => {
 
 exports.getOrders = async (req, res) => {
     try {
-        const { startDate, endDate, orderNumber, type, status, paymentMode, customerName } = req.query;
+        const { startDate, endDate, orderNumber, type, status, paymentMode, customerName, isOnline } = req.query;
 
         let whereClause = { tenantId: req.tenantId };
 
@@ -81,6 +82,11 @@ exports.getOrders = async (req, res) => {
         if (req.query.customerPhone) whereClause.customerPhone = { [Op.like]: `%${req.query.customerPhone}%` };
         if (req.query.source) whereClause.source = req.query.source;
         if (req.query.tableNumber) whereClause.tableNumber = req.query.tableNumber;
+
+        // Online filter: source NOT 'POS' if isOnline is true
+        if (isOnline === 'true' || isOnline === true) {
+            whereClause.source = { [Op.not]: 'POS' };
+        }
 
         // Polling filters
         if (req.query.isKotPrinted !== undefined) {
@@ -275,6 +281,66 @@ exports.markKotPrinted = async (req, res) => {
 
         await order.update({ isKotPrinted: true });
         res.json({ message: 'Marked as printed', id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.sendDeleteOTP = async (req, res) => {
+    try {
+        const { User, Tenant } = require('../models');
+        const tenant = await Tenant.findByPk(req.tenantId);
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+        // Find Owner Email
+        const owner = await User.findOne({
+            where: { tenantId: req.tenantId, role: 'super_admin' }
+        });
+
+        if (!owner) return res.status(404).json({ error: 'Owner not found' });
+
+        // Generate 6 digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        tenant.otp = otp;
+        tenant.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+        await tenant.save();
+
+        // Send real email via StackRiders@gmail.com
+        await sendOTPEmail(owner.email, otp, tenant.name);
+        res.json({ message: 'OTP sent to owner email', ownerEmail: owner.email });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.deleteOrders = async (req, res) => {
+    try {
+        const { otp, ids } = req.body; // ids is array of order IDs
+        const { Tenant } = require('../models');
+
+        const tenant = await Tenant.findByPk(req.tenantId);
+        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+        if (tenant.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        if (new Date() > tenant.otpExpiresAt) {
+            return res.status(400).json({ error: 'OTP Expired' });
+        }
+
+        // Clear OTP
+        tenant.otp = null;
+        tenant.otpExpiresAt = null;
+        await tenant.save();
+
+        // Delete Orders and Items (OrderItem should have CASCADE if possible, but let's be safe)
+        // If they don't have cascade, we do it manually.
+        await OrderItem.destroy({ where: { orderId: { [Op.in]: ids }, tenantId: req.tenantId } });
+        await Order.destroy({ where: { id: { [Op.in]: ids }, tenantId: req.tenantId } });
+
+        res.json({ message: 'Orders deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

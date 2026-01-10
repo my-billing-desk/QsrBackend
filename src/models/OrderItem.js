@@ -49,7 +49,7 @@ const OrderItem = sequelize.define('OrderItem', {
     }
     ,
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });

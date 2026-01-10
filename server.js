@@ -90,11 +90,11 @@ mount('/subscriptions', subscriptionRoutes);
 mount('/financial', require('./src/routes/financialRoutes'));
 
 app.get('/', (req, res) => {
-    res.json({ message: 'QSR Backend API is running (Root)' });
+    res.json({ message: 'Aksha POS Backend API is running (Root)' });
 });
 
 app.get('/api', (req, res) => {
-    res.json({ message: 'QSR Backend API is running (API Root)' });
+    res.json({ message: 'Aksha POS Backend API is running (API Root)' });
 });
 
 app.get('/health', (req, res) => {

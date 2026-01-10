@@ -12,6 +12,8 @@ const Tax = require('./Tax');
 const SpecialNote = require('./SpecialNote');
 const PosDevice = require('./PosDevice');
 const Subscription = require('./Subscription');
+const Wastage = require('./Wastage');
+const WastageItem = require('./WastageItem');
 
 const Discount = require('./Discount');
 const Setting = require('./Setting');
@@ -155,6 +157,12 @@ Order.hasOne(Feedback, { foreignKey: 'orderId', as: 'feedback' });
 Feedback.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 Customer.hasMany(Feedback, { foreignKey: 'customerId', as: 'feedbacks' });
 
+// Wastage Relationships
+Wastage.hasMany(WastageItem, { foreignKey: 'wastageId', as: 'items' });
+WastageItem.belongsTo(Wastage, { foreignKey: 'wastageId' });
+WastageItem.belongsTo(RawMaterial, { foreignKey: 'rawMaterialId' });
+WastageItem.belongsTo(Item, { foreignKey: 'itemId' });
+
 
 
 module.exports = {
@@ -204,7 +212,9 @@ module.exports = {
     GiftCard,
     GiftCardTransaction,
     Feedback,
-    Subscription
+    Subscription,
+    Wastage,
+    WastageItem
 };
 
 

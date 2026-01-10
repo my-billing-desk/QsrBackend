@@ -80,7 +80,7 @@ const Aggregator = sequelize.define('Aggregator', {
         allowNull: true
     },
     tenantId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true
     }
 });
