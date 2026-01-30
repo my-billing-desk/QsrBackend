@@ -145,6 +145,17 @@ const Item = sequelize.define('Item', {
         type: DataTypes.JSON,
         allowNull: true
     },
+    // Multi-Tenancy Global Menu Fields
+    isGlobal: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'If true, this comes from the Master Tenant and cannot be edited by Sub-tenants'
+    },
+    masterItemId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Reference to the original Item ID in the Master Tenant scope if this is a sync copy'
+    },
     tenantId: {
         type: DataTypes.INTEGER,
         allowNull: true

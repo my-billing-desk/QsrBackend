@@ -23,6 +23,10 @@ const Tenant = require('./Tenant');
 User.belongsTo(Tenant, { foreignKey: 'tenantId' });
 Tenant.hasMany(User, { foreignKey: 'tenantId' });
 
+// Tenant Hierarchy
+Tenant.hasMany(Tenant, { as: 'subTenants', foreignKey: 'parentTenantId' });
+Tenant.belongsTo(Tenant, { as: 'parentTenant', foreignKey: 'parentTenantId' });
+
 const AddonGroup = require('./AddonGroup');
 const VariationGroup = require('./VariationGroup');
 const ItemAddonGroup = require('./ItemAddonGroup');

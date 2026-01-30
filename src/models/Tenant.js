@@ -31,6 +31,27 @@ const Tenant = sequelize.define('Tenant', {
     otpExpiresAt: {
         type: DataTypes.DATE,
         allowNull: true
+    },
+    // Multi-Tenancy Hierarchical Fields
+    role: {
+        type: DataTypes.STRING, // 'MASTER' or 'SUB'
+        defaultValue: 'MASTER'
+    },
+    parentTenantId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'Tenants',
+            key: 'id'
+        }
+    },
+    fssaiNumber: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    royaltyPercentage: {
+        type: DataTypes.FLOAT,
+        defaultValue: 10.0
     }
 
 });

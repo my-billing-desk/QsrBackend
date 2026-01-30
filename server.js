@@ -88,6 +88,7 @@ mount('/customers', customerRoutes);
 mount('/ondc', ondcRoutes);
 mount('/subscriptions', subscriptionRoutes);
 mount('/financial', require('./src/routes/financialRoutes'));
+mount('/tenants', require('./src/routes/tenantRoutes'));
 
 app.get('/', (req, res) => {
     res.json({ message: 'Aksha POS Backend API is running (Root)' });
