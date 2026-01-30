@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/PosDeviceController');
+const controller = require('../controllers/POSDeviceController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.use(protect);
