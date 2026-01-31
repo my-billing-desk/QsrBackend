@@ -5,7 +5,16 @@ exports.getAll = async (req, res) => {
         const devices = await PosDevice.findAll({
             where: { tenantId: req.user.tenantId }
         });
-        res.json(devices);
+
+        // Add isOnline property dynamically
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const deviceList = devices.map(d => {
+            const dev = d.toJSON();
+            dev.isOnline = d.lastHeartbeat && new Date(d.lastHeartbeat) > twoMinutesAgo;
+            return dev;
+        });
+
+        res.json({ devices: deviceList });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -13,9 +22,20 @@ exports.getAll = async (req, res) => {
 
 exports.getStats = async (req, res) => {
     try {
+        const { Op } = require('sequelize');
         const total = await PosDevice.count({ where: { tenantId: req.user.tenantId } });
-        const active = await PosDevice.count({ where: { tenantId: req.user.tenantId, status: 'active' } });
-        res.json({ total, active });
+
+        // Active if heartbeat in last 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const active = await PosDevice.count({
+            where: {
+                tenantId: req.user.tenantId,
+                lastHeartbeat: { [Op.gt]: twoMinutesAgo }
+            }
+        });
+
+        const inactive = total - active;
+        res.json({ total, active, inactive });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
