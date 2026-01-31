@@ -33,6 +33,7 @@ const Outlet = sequelize.define('Outlet', {
     restaurantType: { type: DataTypes.STRING }, // QSR, Dine In, etc.
     onlineOrderChannels: { type: DataTypes.STRING }, // Zomato, Swiggy, etc.
     fssaiLicNo: { type: DataTypes.STRING },
+    gstNumber: { type: DataTypes.STRING },
     taxAuthorityName: { type: DataTypes.STRING, defaultValue: 'GST' },
     outletServingType: { type: DataTypes.STRING }, // Service, Goods, Both
     enableKOTForOnlineOrder: { type: DataTypes.BOOLEAN, defaultValue: true },
